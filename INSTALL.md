@@ -1,8 +1,33 @@
 # Installing Pixel Terrarium
 
-This guide walks you through getting Pixel Terrarium onto your computer as a
-normal desktop app, step by step. No programming knowledge needed. It takes
-about 10 minutes, most of it waiting for downloads.
+## Windows: the easy way
+
+1. Get **`Pixel Terrarium Setup.exe`**:
+   - from the **Releases** section on the right of the GitHub project page
+     (https://github.com/stefke20/DesktopSandbox/releases), or
+   - from the **Actions** tab: open the latest **Build installers** run and
+     download **installer-windows-latest** (a ZIP with the `.exe` inside).
+2. Double-click it. Pixel Terrarium installs and opens, and you get a Start menu
+   and desktop shortcut.
+3. If Windows says **"Windows protected your PC"**, click **More info**, then
+   **Run anyway**. This appears because the app isn't signed by a registered
+   developer; you only see it once.
+
+That's it. To uninstall: **Settings → Apps → Pixel Terrarium → Uninstall**.
+
+**For whoever looks after the project:** to make a new `.exe`, go to the
+**Actions** tab, choose **Build installers**, and click **Run workflow**. To
+publish it on the Releases page, push a version tag:
+`git tag v0.1.0 && git push origin v0.1.0`. This also builds the Mac `.dmg`
+and the Linux `.AppImage`.
+
+---
+
+## Building it yourself (any computer)
+
+The rest of this guide walks you through building Pixel Terrarium from the
+source code, step by step. No programming knowledge needed. It takes about 10
+minutes, most of it waiting for downloads.
 
 There are two ways to do it:
 
