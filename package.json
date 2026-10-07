@@ -1,7 +1,7 @@
 {
   "name": "pixel-terrarium",
   "productName": "Pixel Terrarium",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A living 2D pixel sandbox for your desktop. Watch biomes go about their day, or play god.",
   "main": "main.js",
   "license": "MIT",
