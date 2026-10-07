@@ -5,7 +5,7 @@
   const { U, M } = DS;
 
   const DEFAULTS = {
-    biome: 'grasslands', scale: 4, dayMinutes: 12, autoCycle: 0, showStats: false, showHud: true,
+    biome: 'grasslands', scale: 4, dayMinutes: 12, autoCycle: 0, showStats: false, showHud: true, showMenu: true,
     idleDelay: 5, fps: 60, stripHeight: 0.3, edgePan: true,
   };
   const KEY = 'pixel-terrarium.settings';
@@ -75,6 +75,10 @@
         this.resizeT = setTimeout(() => this.onResize(), 400);
       });
       this.setupDesktop();
+      this.menu = new DS.Menu(this);
+      this.solar = new DS.Solar(this);
+      if (this.settings.showMenu !== false) this.menu.open('main');
+      else this.hasGame = true;
       this.acc = 0;
       this.prev = performance.now();
       requestAnimationFrame((t) => this.loop(t));
@@ -85,7 +89,7 @@
     setSetting(k, v) {
       this.settings[k] = v;
       this.save();
-      if (k === 'scale') this.loadBiome(this.biome.id);
+      if (k === 'scale') { if (this.mode === 'sandbox') this.loadBiome(this.biome.id); else this.loadWorld(this.worldOpts); }
       this.applyBodyClasses();
       if (k === 'dayMinutes' && v === -1) this.syncClock();
     },
@@ -100,19 +104,12 @@
     },
 
     // ------------------------------------------------------------ world lifecycle
-    loadBiome(id, seed) {
+    // shared world setup; returns { W, eco, rng }
+    makeWorld(w, h, biome, seed, keepCiv) {
       if (this.events && this.world) this.events.clear();
-      const biome = DS.BiomeMap[id] || DS.Biomes[0];
-      this.biome = biome;
-      this.settings.biome = biome.id;
-      this.save();
-      document.getElementById('biome').value = biome.id;
-      const scale = this.settings.scale;
-      this.scale = scale;
-      // the world is bigger than the screen: the camera scrolls over it
-      this.screenW = Math.max(80, Math.ceil(window.innerWidth / scale));
-      this.screenH = Math.max(50, Math.ceil(window.innerHeight / scale));
-      const w = Math.ceil(this.screenW * WORLD_X), h = Math.ceil(this.screenH * WORLD_Y);
+      if (this.civ && !keepCiv) { this.civ.clear(); this.civ = null; }
+      if (!keepCiv) { this.planet = 'earth'; this.planets = {}; document.body.classList.remove('off-world'); }
+      this.scale = this.settings.scale;
       const W = new DS.World(w, h);
       W.baseTemp = biome.temp;
       W.temp = biome.temp;
@@ -140,25 +137,147 @@
       this.meteors = [];
       this.tempOffset = 0;
       this.tempOffsetT = 0;
-      const rng = U.rng(seed == null ? (Math.random() * 1e9) | 0 : seed);
-      biome.gen(W, rng, eco);
-      W.frame++;
-      this.bg = new DS.Background(W, biome, rng);
-      weather.setBiome(biome);
+      this.biome = biome;
       this.updateClock(0);
       eco.daylight = this.daylight;
-      eco.populate(biome.fauna || []);
+      return { W, eco, rng: U.rng(seed == null ? (Math.random() * 1e9) | 0 : seed) };
+    },
+
+    finishWorld(rng) {
+      const W = this.world;
+      W.frame++;
+      this.bg = new DS.Background(W, this.biome, rng);
+      this.weather.setBiome(this.biome);
       for (let i = 0; i < 40; i++) W.step();
-      this.scene.width = this.cells.width = this.light.width = w;
-      this.scene.height = this.cells.height = this.light.height = h;
-      this.img = this.cctx.createImageData(w, h);
+      this.scene.width = this.cells.width = this.light.width = W.w;
+      this.scene.height = this.cells.height = this.light.height = W.h;
+      this.img = this.cctx.createImageData(W.w, W.h);
       this.buf = new Uint32Array(this.img.data.buffer);
       this.sizeCanvas();
       this.cycleT = 0;
+      this.eventT = 0;
       this.follow = null;
-      this.cam = { z: this.cam ? this.cam.z : 1, x: w / 2, y: h / 2 };
+      this.cam = { z: this.cam ? this.cam.z : 1, x: W.w / 2, y: W.h / 2 };
       this.clampCam();
       if (this.god) { this.god.refresh(); this.updateHud(); }
+      document.body.classList.toggle('mode-world', this.mode !== 'sandbox');
+      document.body.classList.toggle('mode-colony', this.mode === 'colony');
+    },
+
+    measureScreen() {
+      const scale = this.settings.scale;
+      this.screenW = Math.max(80, Math.ceil(window.innerWidth / scale));
+      this.screenH = Math.max(50, Math.ceil(window.innerHeight / scale));
+    },
+
+    loadBiome(id, seed) {
+      const biome = DS.BiomeMap[id] || DS.Biomes[0];
+      this.mode = 'sandbox';
+      this.settings.biome = biome.id;
+      this.save();
+      document.getElementById('biome').value = biome.id;
+      this.measureScreen();
+      // the world is bigger than the screen: the camera scrolls over it
+      const w = Math.ceil(this.screenW * WORLD_X), h = Math.ceil(this.screenH * WORLD_Y);
+      const { W, eco, rng } = this.makeWorld(w, h, biome, seed);
+      W.activeRanges = null;
+      biome.gen(W, rng, eco);
+      eco.populate(biome.fauna || []);
+      this.finishWorld(rng);
+    },
+
+    // World mode (and the base for Colony mode): many biomes in one big world
+    loadWorld(opts = {}) {
+      this.mode = opts.colony ? 'colony' : 'world';
+      this.worldOpts = opts;
+      this.measureScreen();
+      const sizes = { small: 3, medium: 5, large: 8, huge: 12 };
+      const w = Math.ceil(this.screenW * (sizes[opts.size] || 5)), h = Math.ceil(this.screenH * 2.2);
+      const { W, eco, rng } = this.makeWorld(w, h, DS.BiomeMap.grasslands, opts.seed);
+      W.activeRanges = [];
+      eco.cap = Math.round(Math.min(700, 200 + w * 0.3));
+      DS.WorldGen.build(W, eco, rng, opts);
+      // start the camera somewhere on land near the middle
+      let sx = Math.round(w / 2);
+      for (let k = 0; k < 40; k++) { const x = Math.round(w * (0.3 + rng() * 0.4)); if (!W.isLiquid(x, W.groundY(x))) { sx = x; break; } }
+      this.biome = W.zones[W.zoneIdx[sx]].biome;
+      this.finishWorld(rng);
+      this.cam.x = sx;
+      this.cam.y = W.groundY(sx) - this.screenH * 0.2;
+      this.clampCam();
+      if (opts.colony && DS.Civ) {
+        this.civ = new DS.Civ(this, opts);
+        this.civ.start(rng);
+      }
+      document.getElementById('biome').value = '__world';
+    },
+
+    // ------------------------------------------------------------ planets (Colony mode)
+    saveSlot() {
+      return { world: this.world, fx: this.fx, eco: this.eco, weather: this.weather, bg: this.bg, biome: this.biome, meteors: this.meteors, cam: Object.assign({}, this.cam) };
+    },
+
+    loadSlot(s) {
+      Object.assign(this, { world: s.world, fx: s.fx, eco: s.eco, weather: s.weather, bg: s.bg, biome: s.biome, meteors: s.meteors });
+      this.attachWorld();
+      this.cam = Object.assign({}, s.cam);
+      this.clampCam();
+    },
+
+    attachWorld() {
+      const W = this.world;
+      this.scene.width = this.cells.width = this.light.width = W.w;
+      this.scene.height = this.cells.height = this.light.height = W.h;
+      this.img = this.cctx.createImageData(W.w, W.h);
+      this.buf = new Uint32Array(this.img.data.buffer);
+      this.bg.key = '';
+      this.follow = null;
+      this.tempOffset = 0;
+      this.tempOffsetT = 0;
+    },
+
+    // generate a world for a body of the solar system (keeps the civilisation)
+    genPlanet(id) {
+      const biome = DS.Space.PLANETS[id];
+      this.measureScreen();
+      const w = Math.ceil(this.screenW * 3.2), h = Math.ceil(this.screenH * 1.6);
+      const seed = ((this.worldOpts && this.worldOpts.seed) || 1) * 31 + id.length * 977 + id.charCodeAt(0);
+      const { W, eco, rng } = this.makeWorld(w, h, biome, seed, true);
+      W.activeRanges = [];
+      eco.cap = Math.round(Math.min(500, 150 + w * 0.25));
+      biome.gen(W, rng, eco);
+      eco.populate(biome.fauna || []);
+      W.frame++;
+      this.bg = new DS.Background(W, biome, rng);
+      this.weather.setBiome(biome);
+      for (let i = 0; i < 40; i++) W.step();
+      this.attachWorld();
+      this.cam = { z: this.cam ? this.cam.z : 1, x: W.w / 2, y: W.groundY(Math.round(W.w / 2)) - this.screenH * 0.3 };
+      this.clampCam();
+      if (this.civ) this.civ.arrive(id, rng);
+    },
+
+    // travel to another body; generates it the first time
+    goPlanet(id, quiet) {
+      if (id === this.planet || this.mode !== 'colony') return;
+      this.events.clear();
+      this.planets[this.planet] = this.saveSlot();
+      this.planet = id;
+      if (this.planets[id]) this.loadSlot(this.planets[id]);
+      else this.genPlanet(id);
+      const name = id === 'earth' ? 'Earth' : DS.Space.BY[id].name;
+      document.body.classList.toggle('off-world', id !== 'earth');
+      if (this.god) { this.god.refresh(); this.updateHud(); }
+      if (!quiet) this.toast(`${id === 'earth' ? '🌍' : DS.Space.BY[id].icon} ${name}`);
+    },
+
+    // run fn with another planet loaded, then come back (used when a ship lands far away)
+    withPlanet(id, fn) {
+      const back = this.planet;
+      if (back === id) return fn();
+      const cam = Object.assign({}, this.cam);
+      this.goPlanet(id, true);
+      try { fn(); } finally { this.goPlanet(back, true); this.cam = cam; this.clampCam(); }
     },
 
     sizeCanvas() {
@@ -180,7 +299,7 @@
       const sw = Math.ceil(window.innerWidth / this.scale), sh = Math.ceil(window.innerHeight / this.scale);
       if (sw === this.screenW && sh === this.screenH) return;
       // only rebuild the world if the new screen no longer fits comfortably inside it
-      if (sw * 1.1 > this.world.w || sh > this.world.h || sw < this.world.w / (WORLD_X * 1.6)) { this.loadBiome(this.biome.id); return; }
+      if (this.mode === 'sandbox' && (sw * 1.1 > this.world.w || sh > this.world.h || sw < this.world.w / (WORLD_X * 1.6))) { this.loadBiome(this.biome.id); return; }
       this.screenW = sw;
       this.screenH = sh;
       this.sizeCanvas();
@@ -270,18 +389,57 @@
       if (this.tempOffsetT > 0) { this.tempOffsetT--; if (this.tempOffsetT < 600) this.tempOffset *= 0.995; } else this.tempOffset = 0;
       const wt = this.weather.type;
       const wAdj = (wt === 'rain' || wt === 'storm' ? -2 : wt === 'snow' ? -5 : 0) * this.weather.intensity;
-      W.temp = this.biome.temp + (this.daylight - 0.5) * 8 + wAdj + this.tempOffset + this.events.tempOffset();
+      const delta = (this.daylight - 0.5) * 8 + wAdj + this.tempOffset + this.events.tempOffset();
+      if (W.zones) {
+        // the biome under the camera sets the sky, the weather and the HUD
+        const cx = U.clamp(Math.round(this.cam.x), 0, W.w - 1);
+        const zb = W.zones[W.zoneIdx[cx]].biome;
+        if (zb !== this.biome) { this.biome = zb; this.bg.biome = zb; this.weather.probs = zb.weather || { clear: 1 }; if (this.god.tab === 'life') this.god.refresh(); }
+        W.tempDelta = delta;
+        W.temp = W.colTemp[cx] + delta;
+        const v = this.view();
+        const ranges = [[v.x - 90, v.x + v.w + 90]];
+        if (this.civ) for (const c of this.civ.colonies) ranges.push([c.x - 120, c.x + 120]);
+        W.activeRanges = ranges;
+        this.weather.spawnRange = [v.x - 40, v.x + v.w + 40];
+      } else {
+        W.temp = this.biome.temp + delta;
+        if (W.activeRanges) {
+          // big off-world maps: only simulate what is in view and around towns at full rate
+          const v = this.view();
+          const ranges = [[v.x - 90, v.x + v.w + 90]];
+          if (this.civ) for (const c of this.civ.colonies) if (c.planet === this.planet) ranges.push([c.x - 120, c.x + 120]);
+          W.activeRanges = ranges;
+          this.weather.spawnRange = [v.x - 40, v.x + v.w + 40];
+        }
+      }
       W.daylight = this.daylight;
       eco.daylight = this.daylight;
       eco.flare = this.flare;
       this.weather.update(this.daylight);
       this.events.update();
-      if (this.biome.marineSnow && Math.random() < 0.6) this.fx.add(U.rand(0, W.w), U.rand(W.h * 0.15, W.h * 0.3), U.rand(-0.05, 0.05), U.rand(0.05, 0.12), 'rgba(220,230,240,0.7)', 900, 0);
+      if (this.biome.marineSnow && Math.random() < 0.6) this.fx.add(this.cam.x + U.rand(-0.6, 0.6) * this.screenW, U.rand(W.h * 0.15, W.h * 0.3), U.rand(-0.05, 0.05), U.rand(0.05, 0.12), 'rgba(220,230,240,0.7)', 900, 0);
       W.step();
       eco.update();
+      if (this.civ) this.civ.update();
       this.fx.update();
       this.updateMeteors();
       this.god.update();
+      this.randomEvents();
+    },
+
+    // World & Colony modes: disasters happen on their own (as configured)
+    randomEvents() {
+      const o = this.worldOpts;
+      if (this.mode === 'sandbox' || !o || !o.eventEvery) return;
+      this.eventT = (this.eventT || 0) + 1;
+      if (this.eventT < o.eventEvery * 3600) return;
+      this.eventT = U.rand(-0.3, 0.3) * o.eventEvery * 3600;
+      const list = Object.keys(DS.Events.DEFS).filter((id) => !o.events || o.events.has(id));
+      if (!list.length) return;
+      const v = this.view();
+      const id = U.pick(list);
+      this.events.start(id, v.x + U.rand(0.2, 0.8) * v.w, v.y + v.h * 0.4);
     },
 
     loop(now) {
@@ -302,12 +460,19 @@
       } else {
         this.god.update();
       }
-      this.edgePan();
+      if (this.menuOpen) {
+        // slowly pan across the landscape behind the menu
+        this.menuDir = this.menuDir || 1;
+        this.cam.x += 0.12 * this.menuDir;
+        const before = this.cam.x;
+        this.clampCam();
+        if (this.cam.x !== before) this.menuDir = -this.menuDir;
+      } else this.edgePan();
       this.render();
       // idle handling
       const idleDelay = this.settings.idleDelay;
-      if (idleDelay > 0 && !this.god.down && !this.god.tab && now - this.lastInput > idleDelay * 1000) document.body.classList.add('idle');
-      if (this.settings.autoCycle > 0 && this.speed > 0) {
+      if (idleDelay > 0 && !this.menuOpen && !this.god.down && !this.god.tab && now - this.lastInput > idleDelay * 1000) document.body.classList.add('idle');
+      if (this.settings.autoCycle > 0 && this.speed > 0 && this.mode === 'sandbox' && !this.menuOpen) {
         this.cycleT += dt;
         if (this.cycleT > this.settings.autoCycle * 60000 && now - this.lastInput > 30000) {
           const others = DS.Biomes.filter((b) => b.id !== this.biome.id);
@@ -324,15 +489,22 @@
       let dark = U.clamp((1 - daylight) * 0.6 + storm, 0, 0.72);
       dark *= 1 - Math.min(1, this.weather.flash);
       sctx.globalCompositeOperation = 'source-over';
-      sctx.drawImage(this.bg.render(this.time, daylight, this.weather, this.view()), 0, 0);
+      const vv = this.view();
+      // only the part of the world in view is composited
+      const rx0 = Math.max(0, Math.floor(vv.x) - 2), rx1 = Math.min(W.w, Math.ceil(vv.x + vv.w) + 2), ry1 = Math.min(W.h, Math.ceil(vv.y + vv.h) + 2);
+      const ry0 = Math.max(0, Math.floor(vv.y) - 2), rw = rx1 - rx0, rh = ry1 - ry0;
+      this.weather.vrect = [rx0, ry0, rw, rh];
+      sctx.drawImage(this.bg.render(this.time, daylight, this.weather, vv), rx0, ry0, rw, rh, rx0, ry0, rw, rh);
       this.bg.drawDynamic(sctx, this.time, daylight, this.frame, this.flare);
       this.weather.drawClouds(sctx, daylight, this.bg.skyBottom || [200, 220, 240]);
-      W.render(this.buf, this.flare ? 0 : dark);
-      this.cctx.putImageData(this.img, 0, 0);
-      sctx.drawImage(this.cells, 0, 0);
+      W.render(this.buf, this.flare ? 0 : dark, rx0, rx1, ry1);
+      this.cctx.putImageData(this.img, 0, 0, rx0, ry0, rw, rh);
+      sctx.drawImage(this.cells, rx0, ry0, rw, rh, rx0, ry0, rw, rh);
       const lights = W.lights;
-      const abyss = this.biome.abyss;
-      this.eco.draw(sctx, lights, abyss ? 1 : dark);
+      const abyssZones = W.zones ? W.zones.filter((z) => z.biome.abyss) : this.biome.abyss ? [{ x0: 0, x1: W.w, biome: this.biome }] : [];
+      const abyss = abyssZones.length > 0;
+      this.eco.draw(sctx, lights, this.biome.abyss ? 1 : dark, vv);
+      if (this.civ) this.civ.draw(sctx, lights, dark, vv);
       for (const l of this.events.pendingLights || []) lights.push(l);
       this.events.pendingLights = [];
       this.events.drawWorld(sctx);
@@ -348,26 +520,26 @@
       if (dark > 0.03 || abyss) {
         const L = this.lctx;
         L.globalCompositeOperation = 'source-over';
-        L.clearRect(0, 0, W.w, W.h);
+        L.clearRect(rx0, ry0, rw, rh);
         L.fillStyle = `rgba(8,12,38,${dark})`;
-        L.fillRect(0, 0, W.w, W.h);
-        if (abyss) {
+        L.fillRect(rx0, ry0, rw, rh);
+        for (const z of abyssZones) {
           // sunlight fades away with depth
-          const y0 = W.h * abyss;
+          const y0 = W.zones ? W.h * 0.55 : W.h * z.biome.abyss;
           const g = L.createLinearGradient(0, y0, 0, W.h);
           g.addColorStop(0, 'rgba(2,6,20,0)');
           g.addColorStop(0.5, 'rgba(2,6,20,0.75)');
           g.addColorStop(1, 'rgba(1,2,8,0.95)');
           L.fillStyle = g;
-          L.fillRect(0, y0, W.w, W.h - y0);
-          dark = Math.max(dark, 0.6);
+          L.fillRect(z.x0, y0, z.x1 - z.x0, W.h - y0);
+          if (this.biome.abyss) dark = Math.max(dark, 0.6);
         }
         L.globalCompositeOperation = 'destination-out';
         for (let i = 0; i < lights.length; i += 3) {
           const k = lights[i + 2], r = LIGHTS[k].r;
           L.drawImage(this.masks[k], lights[i] - r, lights[i + 1] - r);
         }
-        sctx.drawImage(this.light, 0, 0);
+        sctx.drawImage(this.light, rx0, ry0, rw, rh, rx0, ry0, rw, rh);
         sctx.globalCompositeOperation = 'lighter';
         sctx.globalAlpha = Math.min(1, dark * 1.1);
         for (let i = 0; i < lights.length; i += 3) {
@@ -396,6 +568,7 @@
       if (ox || oy) ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
       ctx.drawImage(this.scene, v.x, v.y, v.w, v.h, ox, oy, v.w * v.s, v.h * v.s);
       this.god.drawOverlay(ctx, v);
+      if (this.civ && this.mode === 'colony') this.civ.drawLabels(ctx, { x: v.x - ox / v.s, y: v.y - oy / v.s, s: v.s });
       this.drawMinimap(ctx);
     },
 
@@ -493,6 +666,20 @@
       if (this.follow && !this.follow.dead) badges.push(`👁 following ${this.follow.sp.name}`);
       for (const e of this.events.list) badges.push(DS.Events.DEFS[e.type][1] + ' ' + DS.Events.DEFS[e.type][0]);
       document.getElementById('hud-badges').innerHTML = badges.map((b) => `<span>${b}</span>`).join('');
+      const ch = document.getElementById('colony-hud');
+      const col = this.mode === 'colony' && this.civ && this.civ.local;
+      if (col) {
+        const C = DS.Civ, era = C.ERAS[col.era], r = col.research && C.TECHS[col.research];
+        // the basics, plus whatever the current research and next building are waiting for
+        const keys = new Set(['food', 'wood', 'stone']);
+        for (const cost of [r && r.cost, col.wanted && C.BUILDINGS[col.wanted].cost]) for (const k in cost || {}) keys.add(k);
+        if (col.offworld && DS.Space.PLANETS[col.planet]) for (const k of DS.Space.PLANETS[col.planet].res) keys.add(k);
+        for (const [k] of C.RES) if (keys.size < 8 && col.res[k] >= 1) keys.add(k);
+        const res = C.RES.filter(([k]) => keys.has(k)).map(([k, i]) => `<span title="${k}">${i} ${Math.floor(col.res[k])}</span>`).join('');
+        ch.innerHTML = col.alive
+          ? `<span class="era">${era.icon} ${col.name} · ${era.name}</span><span>👥 ${col.pop}/${col.housing}</span><span>🛡️ ${col.soldiers}</span>${res}<span>🔬 ${r ? `${r.name} ${Math.min(100, Math.floor((col.knowledge / r.k) * 100))}%` : `💡 ${Math.floor(col.knowledge)}`}</span>`
+          : `<span class="era">💀 ${col.name} has fallen</span>`;
+      }
       if (this.settings.showStats) {
         const counts = Object.entries(this.eco.count).sort((a, b) => b[1] - a[1]);
         let html = `<b>Population</b><br>`;
@@ -513,7 +700,11 @@
         document.body.classList.toggle('watch-only', !!s.clickThrough);
         this.god.refresh();
       };
-      d.getState().then(applyState);
+      d.getState().then((s) => {
+        applyState(s);
+        // running as a wallpaper or desktop strip: skip the menu and just play
+        if (s.mode !== 'window' && this.menuOpen) { this.menu.close(); this.loadBiome(this.settings.biome); this.hasGame = true; }
+      });
       d.onCommand((cmd) => {
         switch (cmd.type) {
           case 'biome': this.loadBiome(cmd.id); break;

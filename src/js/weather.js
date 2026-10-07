@@ -34,6 +34,7 @@
 
     setBiome(biome) {
       this.probs = biome.weather || { clear: 1 };
+      this.noClouds = !!biome.noClouds;
       this.clouds = [];
       this.drops = [];
       this.auto = true;
@@ -57,6 +58,7 @@
     }
 
     addCloud(x) {
+      if (this.noClouds) return;
       const W = this.world;
       const w = U.randInt(14, 40);
       const puffs = [];
@@ -129,7 +131,7 @@
       else if (this.type === 'snow') kind = 'snow';
       else if (this.type === 'ashfall') kind = 'ash';
       else if (this.type === 'sandstorm') kind = 'sand';
-      const maxDrops = Math.round(W.w * (kind === 'rain' ? 1.4 : kind === 'sand' ? 1.2 : 0.9) * this.intensity * this.boost);
+      const maxDrops = Math.round((this.spawnRange ? this.spawnRange[1] - this.spawnRange[0] : W.w) * (kind === 'rain' ? 1.4 : kind === 'sand' ? 1.2 : 0.9) * this.intensity * this.boost);
       if (kind && this.drops.length < maxDrops) {
         const n = Math.min(12 * this.boost, maxDrops - this.drops.length);
         for (let i = 0; i < n; i++) this.spawnDrop(kind);
@@ -170,7 +172,11 @@
 
     spawnDrop(kind) {
       const W = this.world;
-      const x = U.rand(-20, W.w + 20);
+      const x = this.spawnRange ? U.rand(this.spawnRange[0], this.spawnRange[1]) : U.rand(-20, W.w + 20);
+      if (W.colTemp && (kind === 'rain' || (kind === 'snow' && (this.type === 'rain' || this.type === 'storm')))) {
+        const tx = U.clamp(Math.round(x), 0, W.w - 1);
+        kind = W.tempAt(Math.round(W.h * 0.3), tx) < 0 ? 'snow' : 'rain';
+      }
       const d = { x, y: U.rand(-10, 0), kind, vx: 0, vy: 0 };
       if (kind === 'rain') { d.vy = U.rand(2.2, 3); d.vx = this.wind * 0.6; }
       else if (kind === 'snow') { d.vy = U.rand(0.25, 0.5); d.vx = this.wind * 0.3; d.ph = Math.random() * 6; }
@@ -231,7 +237,9 @@
       const night = 1 - daylight;
       const col = U.mix(base, U.mix(sky, [20, 24, 40], 0.5), night * 0.85);
       const shadow = U.shade(col, 0.82);
+      const v = this.vrect;
       for (const c of this.clouds) {
+        if (v && (c.x + c.w < v[0] || c.x - c.w > v[0] + v[2])) continue;
         ctx.fillStyle = U.css(shadow, 0.9);
         for (const [dx, dy, r] of c.puffs) this.disc(ctx, c.x + dx, c.y + dy + 1, r);
         ctx.fillStyle = U.css(col, 0.95);
@@ -276,7 +284,7 @@
         g.addColorStop(0, `rgba(${fc},${this.fog * 0.3})`);
         g.addColorStop(1, `rgba(${fc},${this.fog})`);
         ctx.fillStyle = g;
-        ctx.fillRect(0, 0, W.w, W.h);
+        ctx.fillRect(...(this.vrect || [0, 0, W.w, W.h]));
       }
       for (const b of this.bolts) {
         ctx.strokeStyle = `rgba(255,255,255,${Math.min(1, b.life / 6)})`;
@@ -291,7 +299,7 @@
       }
       if (this.flash > 0.02) {
         ctx.fillStyle = `rgba(230,236,255,${this.flash * 0.5})`;
-        ctx.fillRect(0, 0, W.w, W.h);
+        ctx.fillRect(...(this.vrect || [0, 0, W.w, W.h]));
       }
     }
   }

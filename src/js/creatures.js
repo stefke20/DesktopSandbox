@@ -89,6 +89,7 @@
         this.thinkT = 10 + ((Math.random() * 14) | 0);
         if (sp.ant) DS.Ants.decide(this, eco);
         else if (sp.hive) DS.Hive.decide(this, eco);
+        else if (sp.civ) DS.CivBrain.decide(this, eco);
         else this.decide(eco);
       }
       this.goalT++;
@@ -128,6 +129,7 @@
       if (this.dead) return;
 
       if (sp.hive) DS.Hive.after(this, eco);
+      if (sp.civ) DS.CivBrain.after(this, eco);
       if (sp.magic) DS.Magic.tick(this, eco);
       if (this.dead) return;
 
@@ -264,7 +266,8 @@
           return;
         }
         default:
-          this.tx = U.clamp(x + U.rand(-60, 60), 2, W.w - 3);
+          // farm animals stay near their pen
+          this.tx = this.home ? this.home.x + U.rand(-this.home.r, this.home.r) : U.clamp(x + U.rand(-60, 60), 2, W.w - 3);
           this.ty = this.y;
       }
     }
@@ -674,7 +677,7 @@
         return;
       }
       if (mul === 0) return;
-      this.mv += sp.speed * mul;
+      this.mv += sp.speed * mul * (this.speedMul || 1);
       while (this.mv >= 1) {
         this.mv -= 1;
         this.stepCling(eco);
@@ -697,7 +700,7 @@
           let dig = false;
           if (this.passable(W, nx, ny) && (sp.hab === 'burrow' || this.grip(W, nx, ny))) {
             // ok
-          } else if (sp.digs && MP.dig[W.get(nx, ny)] && (!sp.ant || DS.Ants.mayDig(this))) {
+          } else if (sp.civ ? DS.CivBrain.canDig(this, W.get(nx, ny)) : sp.digs && MP.dig[W.get(nx, ny)] && (!sp.ant || DS.Ants.mayDig(this))) {
             score += 2.5;
             dig = true;
           } else continue;
@@ -709,6 +712,7 @@
         const t = W.get(best[0], best[1]);
         W.set(best[0], best[1], M.EMPTY);
         if (sp.ant) DS.Ants.dug(this, eco, t);
+        else if (sp.civ) DS.CivBrain.dug(this, eco, t);
       }
       if (best[0] !== fx) this.dir = Math.sign(best[0] - fx);
       this.x = best[0];
@@ -753,9 +757,10 @@
     }
 
     // Find a valid random location for a species
-    place(id, edge = false) {
+    place(id, edge = false, range = null) {
       const sp = S[id], W = this.world;
-      const randX = () => (edge ? (Math.random() < 0.5 ? U.randInt(2, 6) : U.randInt(W.w - 7, W.w - 3)) : U.randInt(3, W.w - 4));
+      const a = range ? Math.max(3, range[0]) : 3, b = range ? Math.min(W.w - 4, range[1]) : W.w - 4;
+      const randX = () => (edge && !range ? (Math.random() < 0.5 ? U.randInt(2, 6) : U.randInt(W.w - 7, W.w - 3)) : U.randInt(a, b));
       for (let k = 0; k < 60; k++) {
         const x = randX();
         const gy = W.groundY(x);
@@ -805,14 +810,16 @@
       return null;
     }
 
-    populate(fauna) {
-      this.natives = fauna;
+    // fauna: [[id, n], ...]; range: optional [x0, x1] (world-mode zones); scale overrides eco.scale
+    populate(fauna, range = null, scale = null) {
+      if (!range) this.natives = fauna.map(([id, n]) => [id, n, null, scale]);
+      else this.natives.push(...fauna.map(([id, n]) => [id, n, range, scale]));
       for (const [id, n] of fauna) {
-        if (S[id].ant || S[id].hive) continue;
+        if (!S[id] || S[id].ant || S[id].hive) continue;
         if (S[id].onlyNight && this.daylight > 0.4) continue;
-        const count = Math.max(1, Math.round(n * (this.scale || 1)));
+        const count = Math.max(1, Math.round(n * (scale || this.scale || 1)));
         for (let i = 0; i < count; i++) {
-          const p = this.place(id);
+          const p = this.place(id, false, range);
           if (p) this.spawn(id, p[0], p[1]);
         }
       }
@@ -902,7 +909,7 @@
     }
 
     kill(prey, pred) {
-      if (pred && pred.sp.infects && prey.sp.humanoid) {
+      if (pred && pred.sp.infects && prey.sp.humanoid && !prey.sp.civ) {
         prey.die(this, 'infect');
         const z = this.spawn(pred.sp.infects === true ? 'zombie' : pred.sp.infects, prey.x, prey.y, { newborn: true });
         if (z) z.age = 0;
@@ -960,8 +967,10 @@
     immigrate() {
       if (!this.natives.length || this.list.length >= this.cap) return;
       const night = this.daylight < 0.3;
-      for (const [id, n] of this.natives) {
+      for (const [id, n0, range, sc] of this.natives) {
         const sp = S[id];
+        if (!sp || (this.allowed && !this.allowed(id))) continue;
+        const n = n0 * (sc ? sc / (this.scale || 1) : 1);
         const have = this.count[id] || 0;
         if (sp.ant) {
           if (sp.queen && !sp.hive && !this.colonies.some((c) => c.queenId === id) && Math.random() < 0.15) {
@@ -973,14 +982,14 @@
         }
         if (sp.onlyNight) {
           if (night && have < n * (this.scale || 1) && Math.random() < 0.5) {
-            const p = this.place(id);
+            const p = this.place(id, false, range);
             if (p) this.spawn(id, p[0], p[1]);
           }
           continue;
         }
         const want = Math.max(1, Math.ceil(n * 0.5 * (this.scale || 1)));
         if (have < want && Math.random() < 0.35) {
-          const p = this.place(id, sp.hab === 'ground' || sp.hab === 'roller' || sp.hab === 'air');
+          const p = this.place(id, sp.hab === 'ground' || sp.hab === 'roller' || sp.hab === 'air', range);
           if (p) {
             const c = this.spawn(id, p[0], p[1]);
             if (c && p[0] < this.world.w / 2) c.dir = 1; else if (c) c.dir = -1;
@@ -990,8 +999,11 @@
       }
     }
 
-    draw(ctx, lights, darkness) {
+    draw(ctx, lights, darkness, view) {
+      const vx0 = view ? view.x - 30 : -1e9, vx1 = view ? view.x + view.w + 30 : 1e9;
+      const vy0 = view ? view.y - 30 : -1e9, vy1 = view ? view.y + view.h + 30 : 1e9;
       for (const c of this.list) {
+        if (c.x < vx0 || c.x > vx1 || c.y < vy0 || c.y > vy1) continue;
         const sp = c.sp;
         const e = DS.Sprites.get(sp, c.vkey, c.vpal);
         const n = e.frames.length;

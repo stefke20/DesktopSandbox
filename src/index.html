@@ -14,6 +14,7 @@
     <div id="hud-line"></div>
     <div id="hud-badges"></div>
   </div>
+  <div id="colony-hud"></div>
   <div id="tooltip"></div>
   <div id="toast"></div>
   <div id="stats" class="hidden"></div>
@@ -21,7 +22,9 @@
   <div id="ui">
     <div id="panel" class="hidden"></div>
     <div id="dock">
-      <select id="biome" title="Biome (B = next)"></select>
+      <button class="dock-btn" id="menu-btn" title="Main menu">☰</button>
+      <select id="biome" title="Biome (B = next)"><option value="__world" hidden>🌍 World</option></select>
+      <button class="dock-btn colony-only" data-tab="colony" title="Your colony: tech tree, buildings, guidance">🏛️</button>
       <button class="dock-btn" data-tab="hand" title="Hand: pick up and throw creatures (Esc)">✋</button>
       <button class="dock-btn" data-tab="paint" title="Paint elements">🖌️</button>
       <button class="dock-btn" data-tab="life" title="Create life">🐾</button>
@@ -57,6 +60,12 @@
   <script src="js/events.js"></script>
   <script src="js/biomes.js"></script>
   <script src="js/biomes-more.js"></script>
+  <script src="js/worldgen.js"></script>
+  <script src="js/menu.js"></script>
+  <script src="js/space.js"></script>
+  <script src="js/civ.js"></script>
+  <script src="js/space-life.js"></script>
+  <script src="js/solar.js"></script>
   <script src="js/god.js"></script>
   <script src="js/app.js"></script>
 </body>

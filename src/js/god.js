@@ -115,6 +115,7 @@
         if (c) { this.app.follow = c; if (this.app.cam.z < 3) this.app.setZoom(3, e.clientX, e.clientY); this.app.toast(`👁 Following ${c.sp.name}`); }
       });
       document.getElementById('zoom-in').addEventListener('click', () => this.app.zoomBy(1));
+      document.getElementById('menu-btn').addEventListener('click', () => this.app.menu.open('main'));
       document.getElementById('zoom-out').addEventListener('click', () => this.app.zoomBy(-1));
       window.addEventListener('keydown', (e) => this.onKey(e));
       document.addEventListener('mouseleave', () => { this.app.mouse = null; });
@@ -256,6 +257,125 @@
         case 'settings':
           this.renderSettings(p);
           break;
+        case 'colony':
+          this.renderColony(p);
+          break;
+      }
+    }
+
+    // ------------------------------------------------------------ colony mode
+    renderColony(p) {
+      const civ = this.app.civ;
+      const col = civ && civ.local;
+      if (!col) { p.append(el('h4', {}, 'Colony'), el('div', { class: 'hint' }, 'Start a colony from the main menu (☰).')); return; }
+      const C = DS.Civ;
+      const sub = this.colTab || 'overview';
+      const tabs = el('div', { class: 'tabs' });
+      for (const [id, l] of [['overview', '🏛️ Colony'], ['tech', '🔬 Tech tree'], ['build', '🔨 Build'], ['guide', '🚩 Guide']])
+        tabs.append(el('button', { class: 'chip' + (sub === id ? ' active' : ''), onclick: () => { this.colTab = id; this.renderPanel(); } }, l));
+      p.append(tabs);
+      if (!col.alive) { p.append(el('h4', {}, `💀 ${col.name} has fallen`), el('div', { class: 'hint' }, 'Open the main menu to found a new colony.')); return; }
+
+      if (sub === 'overview') {
+        const era = C.ERAS[col.era];
+        p.append(el('h4', {}, `${era.icon} ${col.name} · ${era.name}`));
+        p.append(el('div', { class: 'col-stats' },
+          el('span', {}, `👥 ${col.pop - col.soldiers}/${col.housing}`), el('span', {}, `🛡️ ${col.soldiers}`),
+          el('span', {}, `💡 ${Math.floor(col.knowledge)}`), el('span', {}, `🏠 ${col.buildings.filter((b) => b.done).length}`)));
+        const res = el('div', { class: 'col-res' });
+        for (const [k, icon] of C.RES) if (col.res[k] > 0 || ['food', 'wood', 'stone'].includes(k)) res.append(el('span', { title: k }, `${icon} ${Math.floor(col.res[k])}`));
+        p.append(res);
+        const r = col.research && C.TECHS[col.research];
+        p.append(el('div', { class: 'row' }, el('label', {}, 'Researching'),
+          el('span', {}, r ? `${r.name} (${Math.min(100, Math.floor((col.knowledge / r.k) * 100))}%)` : '—')));
+        p.append(el('h4', {}, 'Priorities'));
+        for (const [k, l] of [['food', '🍖 Food'], ['wood', '🪵 Wood'], ['stone', '🪨 Stone'], ['mining', '⛏️ Mining'], ['research', '🔬 Research'], ['build', '🔨 Building'], ['military', '⚔️ Military']])
+          p.append(el('div', { class: 'row' }, el('label', {}, l),
+            el('input', { type: 'range', min: 0, max: 6, step: 0.5, value: col.weights[k], oninput: (e) => { col.weights[k] = +e.target.value; } })));
+        const auto = el('div', { class: 'grid' },
+          el('button', { class: 'chip' + (col.autoResearch ? ' active' : ''), onclick: () => { col.autoResearch = !col.autoResearch; this.renderPanel(); } }, '🔬 Auto research'),
+          el('button', { class: 'chip' + (col.autoBuild ? ' active' : ''), onclick: () => { col.autoBuild = !col.autoBuild; this.renderPanel(); } }, '🔨 Auto build'));
+        p.append(auto);
+        p.append(el('h4', {}, 'Divine help'));
+        const now = performance.now();
+        const ready = !this.helpAt || now - this.helpAt > 45000;
+        const help = el('div', { class: 'grid' });
+        const gift = (label, fn) => help.append(el('button', { class: 'chip', onclick: () => { if (performance.now() - (this.helpAt || 0) < 45000) return; fn(); this.helpAt = performance.now(); this.app.toast(label); this.renderPanel(); } }, label));
+        if (ready) {
+          gift('💡 Inspire', () => { col.knowledge += 25 + 60 * col.era; });
+          gift('🍖 Bountiful harvest', () => { col.res.food += 40; });
+          gift('🪵 Gift of timber', () => { col.res.wood += 40; });
+          gift('🪨 Gift of stone', () => { col.res.stone += 40; });
+          gift('👶 Blessed child', () => { for (let i = 0; i < 2; i++) civ.spawnVillager(col); });
+        } else help.append(el('div', { class: 'hint' }, `The gods rest… ${Math.ceil((45000 - (now - this.helpAt)) / 1000)}s`));
+        p.append(help);
+        const rivals = civ.colonies.filter((c) => !c.isPlayer);
+        if (rivals.length) {
+          p.append(el('h4', {}, 'Rival colonies'));
+          for (const o of rivals) {
+            const dist = Math.round((o.x - col.x) / 10);
+            p.append(el('div', { class: 'row rival' },
+              el('span', { class: 'sw', style: `background:${C.COLORS[o.color]}` }),
+              el('label', {}, o.alive ? `${C.ERAS[o.era].icon} ${o.name} · 👥 ${o.pop} · 🛡️ ${o.soldiers}` : `💀 ${o.name}`),
+              el('button', { class: 'chip', onclick: () => { this.app.cam.x = o.x; this.app.cam.y = this.app.world.groundY(o.x) - 40; this.app.clampCam(); } }, `${dist < 0 ? '◀' : '▶'} ${Math.abs(dist)}`)));
+          }
+        }
+        p.append(el('div', { class: 'row' }, el('button', { class: 'chip', onclick: () => { this.app.cam.x = col.x; this.app.cam.y = this.app.world.groundY(col.x) - 40; this.app.clampCam(); } }, '🏛️ Go to my colony')));
+      } else if (sub === 'tech') {
+        p.append(el('div', { class: 'hint' }, 'Click a technology to research it next. Knowledge comes from your people; libraries and astronomy speed it up. Some techs also need materials.'));
+        for (let e = 0; e < C.ERAS.length; e++) {
+          const era = C.ERAS[e];
+          const row = el('div', { class: 'tech-era' + (e > col.era ? ' locked' : '') });
+          row.append(el('div', { class: 'era-name' }, `${era.icon} ${era.name}` + (e > col.era ? ' 🔒' : e === col.era && e < C.ERAS.length - 1 ? ` · ${Object.keys(C.TECHS).filter((k) => col.has(k) && C.TECHS[k].era === e).length}/${era.need} to advance` : '')));
+          const g = el('div', { class: 'tech-row' });
+          for (const id in C.TECHS) {
+            const T = C.TECHS[id];
+            if (T.era !== e) continue;
+            const state = col.has(id) ? 'done' : col.research === id ? 'current' : col.available(id) ? 'avail' : 'locked';
+            const cost = Object.entries(T.cost || {}).map(([k, v]) => `${(C.RES.find((r) => r[0] === k) || [0, k])[1]}${v}`).join(' ');
+            const req = (T.req || []).map((r) => C.TECHS[r].name).join(', ');
+            g.append(el('button', {
+              class: 'tech ' + state,
+              title: `${T.desc}${req ? `\nNeeds: ${req}` : ''}`,
+              onclick: () => { if (state === 'avail' || state === 'current') { col.research = state === 'current' ? null : id; this.renderPanel(); } },
+            }, el('b', {}, (state === 'done' ? '✓ ' : '') + T.name), el('small', {}, `💡${T.k}${cost ? ' · ' + cost : ''}`)));
+          }
+          row.append(g);
+          p.append(row);
+        }
+      } else if (sub === 'build') {
+        p.append(el('div', { class: 'hint' }, 'Order a building; villagers carry the materials and build it near your 🔨 build flag (or the town centre).'));
+        const g = el('div', { class: 'grid' });
+        for (const id in C.BUILDINGS) {
+          const B = C.BUILDINGS[id];
+          if (id === 'center' || B.alien || (!!B.offworld !== col.offworld && !['mine', 'tower', 'barracks', 'lamp'].includes(id))) continue;
+          const unlocked = !B.tech || col.has(B.tech);
+          const cost = Object.entries(B.cost).map(([k, v]) => `${(C.RES.find((r) => r[0] === k) || [0, k])[1]}${v}`).join(' ');
+          const afford = col.canAfford(B.cost);
+          g.append(el('button', {
+            class: 'chip build' + (unlocked && afford ? '' : ' dim'),
+            title: unlocked ? `${B.name}${B.housing ? ` (+${B.housing} housing)` : ''}` : `Needs ${C.TECHS[B.tech].name}`,
+            onclick: () => {
+              if (!unlocked) return this.app.toast(`🔒 Needs ${C.TECHS[B.tech].name}`);
+              if (!afford) return this.app.toast('Not enough materials');
+              if (!civ.queue(col, id)) return this.app.toast('No room to build that here');
+              this.app.toast(`🔨 ${B.name} ordered`);
+              this.renderPanel();
+            },
+          }, `${unlocked ? '' : '🔒 '}${B.name}`, el('small', {}, ` ${cost} · ${col.built(id)}`)));
+        }
+        p.append(g);
+        const pending = col.buildings.filter((b) => !b.done);
+        if (pending.length) p.append(el('div', { class: 'hint' }, 'Under construction: ' + pending.map((b) => `${C.BUILDINGS[b.type].name} ${Math.floor((b.placed / b.cells.length) * 100)}%`).join(', ')));
+      } else {
+        p.append(el('div', { class: 'hint' }, 'Plant a flag, then click in the world. Your people will focus their work around it for a few minutes.'));
+        const g = el('div', { class: 'grid' });
+        for (const [id, l] of [['gather', '🌳 Gather here (trees, berries)'], ['hunt', '🦌 Hunt & fish here'], ['mine', '⛏️ Mine / quarry here'], ['build', '🔨 Build here'], ['attack', '⚔️ Attack here']]) {
+          const active = this.tool.kind === 'guide' && this.tool.id === id;
+          const m = col.markers[id];
+          g.append(el('button', { class: 'chip' + (active ? ' active' : ''), onclick: () => { this.setTool({ kind: 'guide', id }, l.slice(3) + ': click in the world'); this.renderPanel(); } }, l + (m && m.t > 0 ? ' 🚩' : '')));
+        }
+        p.append(g, el('div', { class: 'row' }, el('button', { class: 'chip', onclick: () => { col.markers = {}; this.renderPanel(); } }, '✖ Clear all flags')));
       }
     }
 
@@ -289,6 +409,7 @@
         el('div', { class: 'row' }, el('label', {}, 'Show info'), check('showHud'), el('span', {}, 'clock & weather'), check('showStats'), el('span', {}, 'population')),
         el('div', { class: 'row' }, el('label', {}, 'Edge scrolling'), check('edgePan'), el('span', {}, 'move the mouse to a screen edge to look around')),
         el('div', { class: 'row' }, el('label', {}, 'Hide controls after'), select('idleDelay', [[3, '3 s'], [5, '5 s'], [10, '10 s'], [30, '30 s'], [0, 'never']])),
+        el('div', { class: 'row' }, el('label', {}, 'Main menu'), check('showMenu'), el('span', {}, 'show the main menu when the app starts')),
         el('h4', {}, 'Idle mode'),
         el('div', { class: 'row' }, el('label', {}, 'Change biome every'), select('autoCycle', [[0, 'never'], [5, '5 minutes'], [15, '15 minutes'], [30, '30 minutes'], [60, '1 hour']])),
       );
@@ -330,7 +451,7 @@
       this.button = e.button;
       this.timer = 0;
       this.app.canvas.setPointerCapture && this.app.canvas.setPointerCapture(e.pointerId);
-      if (this.tab && !['paint', 'powers', 'life', 'terrain'].includes(this.tab)) this.openTab(null);
+      if (this.tab && !['paint', 'powers', 'life', 'terrain', 'colony'].includes(this.tab)) this.openTab(null);
       if (this.tool.kind === 'hand' && e.button === 0) {
         const c = this.eco.at(p[0], p[1], 6);
         if (c) {
@@ -350,6 +471,7 @@
         if (def && def[3]) this.power(this.tool.id, p[0], p[1]);
       }
       if (this.tool.kind === 'spawn') this.spawn(this.tool.id, p[0], p[1]);
+      if (this.tool.kind === 'guide') { if (this.app.civ) { this.app.civ.placeMarker(this.tool.id, p[0], p[1]); this.app.toast('🚩 Flag planted'); } this.down = false; this.refresh(); return; }
       if (this.tool.kind === 'event') { this.app.events.start(this.tool.id, p[0], p[1]); this.down = false; return; }
       if (this.tool.kind === 'terrain' && ['mountain', 'lake', 'island'].includes(this.tool.id)) { this.terraformClick(this.tool.id, p[0], p[1]); this.down = false; return; }
       if (this.tool.kind === 'terrain' && this.tool.id === 'flatten') this.flatY = Math.round(p[1]);
@@ -408,6 +530,8 @@
     onKey(e) {
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
       const app = this.app;
+      if (app.solar && app.solar.isOpen) { if (e.key === 'Escape') app.solar.close(); return; }
+      if (app.menuOpen) { if (e.key === 'Escape' && app.menu.screen !== 'main') app.menu.show('main'); else if (e.key === 'Escape' && app.hasGame) app.menu.close(); return; }
       app.poke();
       switch (e.key) {
         case 'h': case 'H': app.toggleUI(); break;
@@ -435,6 +559,7 @@
 
     // called every simulation tick
     update() {
+      if (this.tab === 'colony' && this.app.frame % 60 === 0 && !this.panel.matches(':hover')) this.renderPanel();
       if (!this.down || !this.pos || this.held) return;
       this.timer++;
       this.apply();

@@ -462,7 +462,7 @@
           case 'drought': col = `rgba(220,170,90,${0.12 * (e.fade || 0)})`; break;
           case 'hurricane': col = `rgba(40,50,60,${0.18 * (e.fade || 0)})`; break;
         }
-        if (col) { ctx.fillStyle = col; ctx.fillRect(0, 0, W.w, W.h); }
+        if (col) { ctx.fillStyle = col; ctx.fillRect(...(this.app.weather.vrect || [0, 0, W.w, W.h])); }
       }
     }
   }

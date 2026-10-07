@@ -24,6 +24,111 @@ To build installers (Windows `.exe`, macOS `.dmg`, Linux `.AppImage`):
 npm run dist
 ```
 
+## Game modes
+
+The game opens on a **main menu** with a random biome playing in the background.
+Press ☰ in the dock to get back to it at any time.
+
+### 🏝️ Sandbox
+
+Pick any of the 29 biomes from a list and play god in it.
+
+### 🌍 World
+
+One big world (3 to 12 screens wide, 2 screens high) where many biomes blend into
+each other. Ground height, sky, scenery, water colour, temperature and weather
+all fade over a wide transition instead of stopping at a hard edge.
+
+Neighbouring biomes follow geography rules. Deep sea only borders the open sea,
+coral reefs sit between beach and sea, deserts never border the arctic or ice
+age, mountains lead into taiga or snowy hills, and swamps sit next to wetlands,
+rivers or rainforest. The beehive, ant hill and backyard lawn are a different
+scale and are left out.
+
+Before the world is built, a setup screen lets you:
+
+- **Biomes:** switch biomes off, one by one or by group (cold, temperate, warm & dry, tropical, coast & ocean).
+- **Creatures:** switch off whole categories (mammals, birds, fantasy, ...) or single species.
+- **Events:** choose how often disasters happen on their own, and which ones.
+- **World:** size and an optional seed.
+
+Ores (coal, copper, tin, iron, gold) and oil pockets are buried underground.
+Only the area around the camera (and any towns) runs at full speed, so even
+huge worlds stay smooth.
+
+### 🏛️ Colony
+
+A World-mode map with your own tribe, plus up to three rival colonies. Your
+people pick their own jobs: gathering berries, foraging, hunting, fishing,
+chopping trees (and replanting them), quarrying, mining ore, farming, building
+and studying. You help them out as a god:
+
+- **🏛️ Colony panel:**
+  - **Colony:** population, resources and current research. Sliders set what people focus on (food, wood, stone, mining, research, building, military). Auto research and auto build can be switched off.
+  - **Divine help:** inspiration, harvests, gifts of timber or stone, or a blessed child (with a cooldown).
+  - **Rivals:** a list of the rival colonies, with buttons to fly the camera there.
+- **🔬 Tech tree:** 41 technologies across 8 ages. Click one to research it next.
+- **🔨 Build:** order buildings: huts, farms, animal pens, mines, smithies, libraries, stone houses, watchtowers, water wheels, barracks, windmills, castles, factories, street lamps, oil derricks, launch pads and satellite dishes.
+- **🚩 Guide:** plant a flag to send your people to gather, hunt, mine, build or attack in a particular spot.
+
+| Age | Highlights |
+| --- | --- |
+| 🪨 Stone | stone tools, fire, hunting, huts, fishing, agriculture, domestication |
+| 🥉 Bronze | mining (copper, tin), bronze, pottery, writing, the wheel |
+| ⚔️ Iron | coal, iron, masonry, water wheels, military |
+| 🏰 Medieval | windmills, castles, blacksmithing (steel), astronomy |
+| 🏭 Industrial | steam, railways, electricity, gunpowder, oil, combustion, flight |
+| 🚀 Space | rocketry, computers, satellites, life support, ion drive |
+| 🪐 Interplanetary | asteroid mining, robotics, fusion, terraforming |
+| ✨ Stellar | cryogenics, deep space travel, warp drive, aetherics |
+
+Rivals research and expand too, and once they have soldiers they send raiders
+to plunder you. Watchtowers and castles shoot at enemies. Wild predators and
+monsters prey on villagers, but campfires keep most beasts away and townsfolk
+mob anything that wanders into town.
+
+#### 🪐 Space
+
+The **🪐 Solar system** button (top of the screen in Colony mode) opens an
+overview of the solar system. Click a world to see its resources, life and
+natives, and to visit it as a god at any time. Once your people reach the
+Space Age, build a **launch pad** and send colony ships, then troops. Each
+world is reachable from a certain exploration tier, and every tier needs
+technologies that use resources from the tier before it:
+
+| Tier | Worlds | Needs | Brings back |
+| --- | --- | --- | --- |
+| 1 | The Moon | Rocketry (oil, steel) | Helium-3 |
+| 2 | Mercury, Venus, Mars | Life support + Ion drive (helium-3) | rare earths, sulfur, iron |
+| 3 | Ceres, Vesta, Pallas | Asteroid mining (rare earths, sulfur) | platinum, water ice |
+| 4 | Io, Europa, Ganymede, Callisto | Fusion (helium-3, platinum) | deuterium, sulfur |
+| 5 | Titan, Enceladus, Miranda, Titania | Cryogenics (deuterium) | methane, crystal |
+| 6 | Triton, Pluto | Deep space travel (methane, crystal) | methane, crystal |
+| 7 | Vulcan, Phaeton, Nibiru, Antichthon | Warp drive | aether |
+
+Every world has its own terrain, materials, sky, weather and life: 41 alien
+creatures and 7 alien plants. The Moon has jade rabbits and Earth hanging in
+the sky. Mars has dust skitters and dune wyrms. Venus has acid lakes and cloud
+mantas, and Io has sulfur plains and lava salamanders. Europa and Enceladus
+have glowing eels and ice krakens in an ocean under the ice, and Titan has
+methane seas. Titania has crystal forests.
+
+Tier 7 holds four legendary worlds:
+
+- **Vulcan:** the lost planet inside Mercury's orbit.
+- **Phaeton:** a shard of the mythical planet that became the asteroid belt.
+- **Nibiru:** the wandering planet.
+- **Antichthon:** the Greek Counter-Earth, hidden behind the Sun.
+
+Some worlds have **natives** in their own towns: Martians, Greys, Titanians,
+Salamander folk, Nibirans and the Mirror folk. They defend themselves and raid
+your outposts. Send troops, use **⚔️ Attack the natives**, and conquer the
+world for a big haul of its resources.
+
+Outposts build habitat domes, greenhouses, extractors and mines. Resources and
+research are shared across all your towns, and towns on worlds you are not
+looking at keep producing in the background.
+
 ## Desktop modes
 
 Switch modes from **⚙️ Settings → Desktop** or the tray icon:
@@ -115,7 +220,7 @@ resets. Double-click a creature with the hand to follow it around.
 
 - ✋ **Hand:** pick up a creature and throw it. Hover over a creature to see what it is doing.
 - 🖌️ **Paint:** 24 elements, including water, lava, fire, oil, toxic sludge, seeds, ice, glass, lava vents and eternal flames. Right-drag erases.
-- 🐾 **Life:** create any of the 375 creatures anywhere, even a T-rex in the suburbs. Browse by category or search.
+- 🐾 **Life:** create any of the 418 creatures anywhere, even a T-rex in the suburbs or a Martian on the beach. Browse by category or search.
 - 🐉 **Fantasy & myth** (a category in the Life panel): 54 creatures, many with special abilities:
   - **Dragons** breathe fire, **wyverns** spit poison, and the **phoenix** is reborn from its ashes.
   - **Medusa** and the **basilisk** turn creatures into stone statues, and **trolls** turn to stone in sunlight.
@@ -169,6 +274,12 @@ src/js/terrain.js       landscaping tools (raise/lower/flatten, mountains, lakes
 src/js/events.js        special events (volcano, tornado, black hole, ...)
 src/js/biomes.js        biome definitions and terrain generators
 src/js/biomes-more.js   pond, river, deep sea, beehive, lawn, wetlands, mesa, oasis, enchanted forest
+src/js/worldgen.js      World mode generator (biome adjacency, blending, ores)
+src/js/menu.js          main menu and the World/Colony setup screens
+src/js/civ.js           Colony mode: tech tree, buildings, villager AI, rivals, missions
+src/js/space.js         solar system bodies and planet terrain generators
+src/js/space-life.js    alien creatures, alien plants and alien civilisations
+src/js/solar.js         the solar system overview screen
 src/js/god.js           god-mode tools and UI panels
 src/js/app.js           main loop, lighting, settings, desktop bridge
 ```
