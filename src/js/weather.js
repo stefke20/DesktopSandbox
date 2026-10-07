@@ -4,7 +4,7 @@
   const DS = window.DS;
   const { U, M, MP } = DS;
 
-  const TYPES = ['clear', 'cloudy', 'rain', 'storm', 'snow', 'sandstorm', 'ashfall', 'fog'];
+  const TYPES = ['clear', 'cloudy', 'rain', 'storm', 'drylightning', 'windy', 'snow', 'sandstorm', 'ashfall', 'fog'];
 
   class Weather {
     constructor(world, eco, fx) {
@@ -27,6 +27,7 @@
       this.fog = 0;
       this.probs = { clear: 1 };
       this.shake = 0;
+      this.boost = 1;
     }
 
     get raining() { return (this.type === 'rain' || this.type === 'storm') && this.intensity > 0.2; }
@@ -47,11 +48,11 @@
       this.type = type;
       if (!auto) this.auto = false;
       this.timer = U.randInt(60 * 60 * 1.5, 60 * 60 * 4);
-      const map = { clear: [0, 0.15], cloudy: [0, 0.6], rain: [0.6, 0.85], storm: [1, 1], snow: [0.6, 0.7], sandstorm: [0.8, 0.3], ashfall: [0.5, 0.6], fog: [0, 0.4] };
+      const map = { clear: [0, 0.15], cloudy: [0, 0.6], rain: [0.6, 0.85], storm: [1, 1], drylightning: [0.8, 0.45], windy: [0, 0.35], snow: [0.6, 0.7], sandstorm: [0.8, 0.3], ashfall: [0.5, 0.6], fog: [0, 0.4] };
       const [inten, cover] = map[type];
       this.targetIntensity = inten;
       this.cloudCover = cover;
-      this.targetWind = type === 'storm' ? U.rand(-1.6, 1.6) : type === 'sandstorm' ? (Math.random() < 0.5 ? -2.2 : 2.2) : U.rand(-0.6, 0.6);
+      this.targetWind = type === 'storm' ? U.rand(-1.6, 1.6) : type === 'sandstorm' ? (Math.random() < 0.5 ? -2.2 : 2.2) : type === 'windy' ? (Math.random() < 0.5 ? -1 : 1) * U.rand(2, 3) : type === 'drylightning' ? U.rand(-1, 1) : U.rand(-0.6, 0.6);
       this.fogTarget = type === 'fog' ? 0.55 : type === 'rain' ? 0.12 : type === 'sandstorm' ? 0.35 : 0;
     }
 
@@ -128,9 +129,9 @@
       else if (this.type === 'snow') kind = 'snow';
       else if (this.type === 'ashfall') kind = 'ash';
       else if (this.type === 'sandstorm') kind = 'sand';
-      const maxDrops = Math.round(W.w * (kind === 'rain' ? 1.4 : kind === 'sand' ? 1.2 : 0.9) * this.intensity);
+      const maxDrops = Math.round(W.w * (kind === 'rain' ? 1.4 : kind === 'sand' ? 1.2 : 0.9) * this.intensity * this.boost);
       if (kind && this.drops.length < maxDrops) {
-        const n = Math.min(12, maxDrops - this.drops.length);
+        const n = Math.min(12 * this.boost, maxDrops - this.drops.length);
         for (let i = 0; i < n; i++) this.spawnDrop(kind);
       }
       if (this.type === 'sandstorm' && this.intensity > 0.3 && Math.random() < this.intensity) {
@@ -144,9 +145,24 @@
       }
       this.updateDrops();
 
+      // gusts lift loose leaves, litter, snow and sand
+      if (Math.abs(this.wind) > 1.6) {
+        const gust = (Math.abs(this.wind) - 1.6) * (1 + 0.5 * Math.sin(W.frame * 0.01));
+        for (let k = 0; k < gust * 2; k++) {
+          const x = U.randInt(1, W.w - 2), y = W.groundY(x) - 1;
+          const t = W.get(x, y);
+          const t2 = W.get(x, y + 1);
+          const lift = t === M.LITTER ? t : (t2 === M.SNOW || (t2 === M.SAND && Math.abs(this.wind) > 2.5) || t2 === M.ASH) && W.get(x, y) === M.EMPTY ? t2 : 0;
+          if (!lift) continue;
+          W.set(x, lift === t ? y : y + 1, M.EMPTY);
+          this.fx.debris(x, lift === t ? y : y + 1, this.wind * U.rand(0.5, 1), -U.rand(0.3, 1.2), lift);
+        }
+        if (Math.random() < gust * 0.3) this.fx.add(this.wind > 0 ? 0 : W.w, U.rand(0, W.h * 0.8), this.wind * U.rand(1.5, 2.5), U.rand(-0.1, 0.1), 'rgba(255,255,255,0.35)', 120, 0);
+      }
+
       // lightning
-      if (this.type === 'storm' && this.intensity > 0.5 && --this.boltT <= 0) {
-        this.boltT = U.randInt(150, 600);
+      if ((this.type === 'storm' || this.type === 'drylightning') && this.intensity > 0.5 && --this.boltT <= 0) {
+        this.boltT = U.randInt(150, this.type === 'drylightning' ? 400 : 600);
         this.strike(U.randInt(5, W.w - 5));
       }
       for (let i = this.bolts.length - 1; i >= 0; i--) if (--this.bolts[i].life <= 0) this.bolts.splice(i, 1);
@@ -187,7 +203,8 @@
             else if (t === M.LAVA) { if (free) W.set(lx, ly, M.STEAM); }
             else if (MP.kind[t] === DS.KIND.liquid) { if (Math.random() < 0.3) this.fx.add(rx, ry - 1, U.rand(-0.3, 0.3), -0.5, '#b8d8f8', 8, 0.1); }
             else {
-              if (free && Math.random() < 0.03) W.set(lx, ly, M.WATER);
+              if (free && Math.random() < 0.03 * this.boost) W.set(lx, ly, M.WATER);
+              if (t === M.DRYGRASS && Math.random() < 0.05) W.set(rx, ry, M.GRASS);
               else if (Math.random() < 0.25) this.fx.add(lx, ly, U.rand(-0.4, 0.4), -0.4, '#b8d8f8', 6, 0.1);
               if (t === M.DIRT && Math.random() < 0.01 && W.temp > 0) W.set(rx, ry, M.GRASS);
             }
@@ -208,7 +225,7 @@
     }
 
     drawClouds(ctx, daylight, sky) {
-      const storm = this.type === 'storm' || this.type === 'rain' || this.type === 'ashfall' ? Math.min(1, this.intensity * 1.2) : 0;
+      const storm = this.type === 'storm' || this.type === 'rain' || this.type === 'ashfall' ? Math.min(1, this.intensity * 1.2) : this.type === 'drylightning' ? 0.6 : 0;
       let base = U.mix([255, 255, 255], [90, 95, 110], storm * 0.8);
       if (this.type === 'ashfall') base = U.mix(base, [80, 70, 60], 0.5);
       const night = 1 - daylight;

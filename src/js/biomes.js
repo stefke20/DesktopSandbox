@@ -652,6 +652,256 @@
     },
   });
 
+  // ------------------------------------------------------------------ Savanna
+  add({
+    id: 'savanna', name: 'Savanna', icon: '🦒', temp: 30,
+    water: ['#7aa08a', '#2a4a3a'],
+    bg: { sky: SKY.desert, sun: '#fff0c0', layers: [
+      { type: 'mesa', color: '#a8806a', y: 0.55, amp: 0.1, scale: 90, haze: 0.6 },
+      { type: 'hills', color: '#b8a060', y: 0.62, amp: 0.04, scale: 60, haze: 0.4 },
+      { type: 'trees', color: '#6a7040', y: 0.66, amp: 0.02, scale: 50, haze: 0.3 },
+    ] },
+    weather: { clear: 6, cloudy: 2, drylightning: 1, windy: 1, storm: 0.6, rain: 0.8 },
+    seeds: [['acacia', 1], ['tallgrass', 5], ['deadbush', 1], ['tuft', 2]], tufts: ['tallgrass', 'tuft'], fertility: 0.6,
+    fauna: [['lion', 3], ['zebra', 8], ['giraffe', 3], ['elephant', 3], ['rhino', 1], ['cheetah', 1], ['hyena', 3], ['gazelle', 8], ['wildebeest', 8], ['warthog', 4], ['meerkat', 6], ['ostrich', 2], ['vulture2', 2], ['hippo', 2], ['crocodile', 1], ['dungbeetle', 4], ['grasshopper', 6], ['starling', 4], ['buffalo', 3]],
+    gen(W, rng) {
+      const tops = G.heights(W, rng, 0.72, 0.04, 110);
+      for (let x = 0; x < W.w; x++) G.column(W, x, tops[x], [[rng() < 0.7 ? M.DRYGRASS : M.GRASS, 1], [M.DIRT, 2], [M.SOIL, 9]]);
+      G.pond(W, rng, Math.floor(W.w * (0.3 + rng() * 0.4)), 14, 4, M.WATER, M.MUD);
+      G.scatter(W, rng, 'acacia', W.w / 45, [M.DRYGRASS, M.GRASS], { gap: 10 });
+      G.scatter(W, rng, 'baobab', Math.max(1, W.w / 160), [M.DRYGRASS, M.GRASS], { gap: 10 });
+      G.scatter(W, rng, 'tallgrass', W.w / 2, [M.DRYGRASS, M.GRASS]);
+      G.scatter(W, rng, 'deadbush', W.w / 40, [M.DRYGRASS]);
+      G.boulders(W, rng, W.w / 120, M.SANDSTONE);
+    },
+  });
+
+  // ------------------------------------------------------------------ Swamp
+  add({
+    id: 'swamp', name: 'Swamp', icon: '🐊', temp: 22,
+    water: ['#5a7a4a', '#1a2a1a'],
+    bg: { sky: { day: ['#8aa89a', '#d0dcc0'], dusk: ['#4a4a5a', '#d8a070'], night: ['#060c0a', '#14201a'] }, layers: [
+      { type: 'trees', color: '#4a6a4a', y: 0.5, amp: 0.06, scale: 30, haze: 0.6 },
+      { type: 'jungle', color: '#2e4a32', y: 0.6, amp: 0.06, scale: 25, haze: 0.35 },
+    ] },
+    weather: { fog: 3, cloudy: 3, rain: 2, storm: 0.7, clear: 1.5 },
+    seeds: [['cypress', 2], ['mangrove', 1], ['cattail', 3], ['reed', 2], ['fern2', 2], ['bigmushroom', 1]], tufts: ['tuft', 'cattail', 'fern2'], fertility: 1.4,
+    fauna: [['alligator', 2], ['frog', 5], ['toad', 3], ['heronstand', 2], ['egret', 2], ['mosquito', 10], ['dragonfly', 4], ['dragonfly2', 3], ['firefly', 16], ['snapper', 2], ['catfish', 3], ['salamander', 2], ['newt', 3], ['waterstrider', 6], ['raccoon', 2], ['snake', 2], ['owl', 1], ['crayfish', 4], ['minnow', 10], ['glowworm', 4]],
+    gen(W, rng) {
+      const g = Math.round(W.h * 0.66);
+      const n = U.noise1D(rng, 25, 3);
+      const level = g + 1;
+      for (let x = 0; x < W.w; x++) {
+        const top = Math.round(g + (n(x) - 0.45) * 12);
+        G.column(W, x, top, top > level ? [[M.MUD, 2], [M.SOIL, 6]] : [[M.GRASS, 1], [M.MUD, 2], [M.SOIL, 6]]);
+        for (let y = level; y < top; y++) W.set(x, y, M.WATER);
+      }
+      for (let x = 2; x < W.w - 2; x++) {
+        const t = G.surf(W, x);
+        if (W.get(x, t) === M.WATER && rng() < 0.04) for (let k = 0; k < 3; k++) if (W.get(x + k, level) === M.WATER) W.set(x + k, level, M.LILY, 0, k === 1 && rng() < 0.3 ? 2 : 0);
+      }
+      G.scatter(W, rng, 'cypress', W.w / 22, [M.GRASS, M.MUD], { gap: 5, floor: true, overwrite: false });
+      G.scatter(W, rng, 'mangrove', W.w / 50, [M.MUD], { floor: true, gap: 6 });
+      G.scatter(W, rng, 'willow', W.w / 90, [M.GRASS], { gap: 8 });
+      G.scatter(W, rng, 'cattail', W.w / 6, [M.GRASS, M.MUD]);
+      G.scatter(W, rng, 'fern2', W.w / 10, [M.GRASS]);
+      G.scatter(W, rng, 'bigmushroom', W.w / 70, [M.GRASS]);
+      G.scatter(W, rng, 'seagrass', W.w / 15, [M.MUD], { floor: true });
+    },
+  });
+
+  // ------------------------------------------------------------------ Coral reef
+  add({
+    id: 'reef', name: 'Coral Reef', icon: '🐠', temp: 27,
+    water: ['#3ad0e0', '#0a3a6a'],
+    bg: { sky: SKY.sea, layers: [{ type: 'flat', color: '#2a9ad0', y: 0.18, haze: 0.4 }] },
+    weather: { clear: 7, cloudy: 2, rain: 1, storm: 0.4 },
+    seeds: [['coral', 3], ['anemone', 2], ['seaweed', 1]], waterSeeds: [['coral', 3], ['anemone', 2], ['seagrass', 1]],
+    fauna: [['clownfish', 8], ['angelfish', 6], ['butterflyfish', 8], ['tang', 8], ['parrotfish', 4], ['lionfish', 2], ['pufferfish', 3], ['seahorse', 4], ['moray', 2], ['seaturtle2', 2], ['octopus', 2], ['mantaray', 1], ['shark', 1], ['starfish', 5], ['urchin', 4], ['shrimp', 8], ['jellyfish', 3], ['dolphin', 2], ['seagull', 2], ['smallfish', 12]],
+    gen(W, rng) {
+      const level = Math.round(W.h * 0.18);
+      const n = U.noise1D(rng, 30, 4);
+      for (let x = 0; x < W.w; x++) {
+        const bed = Math.round(W.h * 0.72 + (n(x) - 0.5) * W.h * 0.28);
+        G.column(W, x, bed, [[M.SAND, 3], [M.SANDSTONE, 4]]);
+        for (let y = level; y < bed; y++) W.set(x, y, M.WATER);
+      }
+      for (let i = 0; i < W.w / 25; i++) {
+        const x = Math.floor(rng() * W.w);
+        G.blob(W, x, W.floorY(x), 3 + Math.floor(rng() * 6), 2 + Math.floor(rng() * 4), M.CORAL, rng, [M.WATER, M.SAND]);
+      }
+      G.scatter(W, rng, 'coral', W.w / 4, [M.SAND, M.CORAL, M.SANDSTONE], { floor: true });
+      G.scatter(W, rng, 'anemone', W.w / 8, [M.SAND, M.CORAL], { floor: true });
+      G.scatter(W, rng, 'seagrass', W.w / 8, [M.SAND], { floor: true });
+      G.scatter(W, rng, 'kelp', W.w / 40, [M.SAND], { floor: true });
+    },
+  });
+
+  // ------------------------------------------------------------------ Autumn forest
+  add({
+    id: 'autumn', name: 'Autumn Forest', icon: '🍁', temp: 10,
+    water: ['#4a88b8', '#0e2a40'],
+    bg: { sky: SKY.temperate, layers: [
+      { type: 'hills', color: '#a88a6a', y: 0.48, amp: 0.1, scale: 80, haze: 0.6 },
+      { type: 'trees', color: '#a8582a', y: 0.56, amp: 0.05, scale: 30, haze: 0.45 },
+      { type: 'trees', color: '#7a3a1e', y: 0.62, amp: 0.04, scale: 25, haze: 0.3 },
+    ] },
+    weather: { clear: 4, cloudy: 3, rain: 2, windy: 1.5, fog: 1.5, storm: 0.4 },
+    seeds: [['maple', 3], ['oak', 2], ['birch', 2], ['berrybush', 1], ['bigmushroom', 1], ['fern2', 1]], tufts: ['tuft', 'fern2', 'mushroom'], leafFall: 0.0002,
+    fauna: [['deer', 4], ['elk', 2], ['boar', 2], ['squirrel', 4], ['chipmunk', 3], ['hedgehog', 2], ['badger', 1], ['fox', 2], ['owl', 1], ['woodpecker', 2], ['robin', 2], ['bluejay', 2], ['raven', 1], ['turkey', 3], ['snail', 3], ['slug', 2], ['stagbeetle', 2], ['bear2', 1], ['raccoon', 1], ['skunk', 1], ['worm', 4], ['grouse', 2]],
+    gen(W, rng) {
+      const tops = G.heights(W, rng, 0.68, 0.08, 70);
+      for (let x = 0; x < W.w; x++) G.column(W, x, tops[x], [[M.GRASS, 1], [M.DIRT, 3], [M.SOIL, 9]]);
+      if (rng() < 0.5) G.pond(W, rng, Math.floor(W.w * (0.2 + rng() * 0.6)), 9, 4);
+      G.scatter(W, rng, 'maple', W.w / 18, [M.GRASS], { gap: 4 });
+      G.scatter(W, rng, 'oak', W.w / 40, [M.GRASS], { gap: 6 });
+      G.scatter(W, rng, 'birch', W.w / 30, [M.GRASS], { gap: 3 });
+      G.scatter(W, rng, 'berrybush', W.w / 35, [M.GRASS]);
+      G.scatter(W, rng, 'bigmushroom', W.w / 50, [M.GRASS]);
+      G.scatter(W, rng, 'fern2', W.w / 12, [M.GRASS]);
+      G.litter(W, rng, W.w * 1.2);
+    },
+  });
+
+  // ------------------------------------------------------------------ Bamboo forest
+  add({
+    id: 'bamboo', name: 'Bamboo Forest', icon: '🐼', temp: 16,
+    water: ['#5aa0a0', '#123a3a'],
+    bg: { sky: SKY.jungle, layers: [
+      { type: 'mountains', color: '#8aa8a0', y: 0.42, amp: 0.18, scale: 40, haze: 0.65 },
+      { type: 'pines', color: '#5a8a5a', y: 0.56, amp: 0.06, scale: 30, haze: 0.4 },
+    ] },
+    weather: { fog: 2, clear: 3, cloudy: 3, rain: 2.5, storm: 0.5 },
+    seeds: [['bamboo', 4], ['cherry', 1], ['fern2', 2], ['tuft', 2]], tufts: ['tuft', 'fern2'], fertility: 1.3,
+    fauna: [['panda', 2], ['redpanda', 2], ['koi', 6], ['goldfish', 4], ['frog', 4], ['dragonfly', 4], ['egret', 1], ['grouse', 2], ['cricket', 4], ['firefly', 12], ['monarch', 3], ['snake', 1], ['bee', 4]],
+    gen(W, rng) {
+      const tops = G.heights(W, rng, 0.7, 0.08, 60);
+      for (let x = 0; x < W.w; x++) G.column(W, x, tops[x], [[M.GRASS, 1], [M.DIRT, 3], [M.SOIL, 8]]);
+      const cx = Math.floor(W.w * (0.3 + rng() * 0.4));
+      G.pond(W, rng, cx, 14, 5);
+      for (let x = cx - 12; x < cx + 12; x++) if (rng() < 0.06 && W.get(x, G.surf(W, x)) === M.WATER) W.set(x, G.surf(W, x), M.LILY, 0, 2);
+      G.scatter(W, rng, 'bamboo', W.w / 6, [M.GRASS], { gap: 1 });
+      G.scatter(W, rng, 'cherry', W.w / 60, [M.GRASS], { gap: 6 });
+      G.scatter(W, rng, 'fern2', W.w / 8, [M.GRASS]);
+      G.scatter(W, rng, 'tuft', W.w / 4, [M.GRASS]);
+    },
+  });
+
+  // ------------------------------------------------------------------ Ice age
+  add({
+    id: 'iceage', name: 'Ice Age Tundra', icon: '🦣', temp: -10,
+    water: ['#5a98c8', '#14304a'],
+    bg: { sky: SKY.cold, aurora: true, layers: [
+      { type: 'mountains', color: '#d0dcec', y: 0.42, amp: 0.2, scale: 70, haze: 0.5, snowcap: 0.6 },
+      { type: 'ice', color: '#e8f0f8', y: 0.58, amp: 0.1, scale: 40, haze: 0.35 },
+    ] },
+    weather: { snow: 4, clear: 3, windy: 2, fog: 1 },
+    seeds: [['spruce', 2], ['deadtree', 1], ['tuft', 1]], tufts: ['tuft'], fertility: 0.3,
+    fauna: [['mammoth', 3], ['sabertooth', 1], ['muskox', 4], ['wolf', 3], ['raven', 2], ['lemming', 6], ['reindeer', 4], ['snowyowl', 1], ['arcticfox', 1], ['wolverine', 1]],
+    gen(W, rng) {
+      const tops = G.heights(W, rng, 0.68, 0.1, 110);
+      for (let x = 0; x < W.w; x++) G.column(W, x, tops[x], [[M.SNOW, 2], [M.DIRT, 2], [M.SOIL, 7]]);
+      for (let i = 0; i < 2; i++) {
+        const x = Math.floor(rng() * W.w);
+        G.blob(W, x, G.surf(W, x), 6 + Math.floor(rng() * 8), 3, M.ICE, rng, [M.EMPTY]);
+      }
+      G.scatter(W, rng, 'spruce', W.w / 25, [M.SNOW], { gap: 4 });
+      G.scatter(W, rng, 'deadtree', W.w / 80, [M.SNOW]);
+      G.boulders(W, rng, W.w / 60);
+      W.dustSnow(1, rng);
+    },
+  });
+
+  // ------------------------------------------------------------------ more life in the original biomes
+  const EXTRA = {
+    grasslands: {
+      fauna: [['hare', 3], ['horse', 3], ['robin', 2], ['sparrow', 5], ['goldfinch', 3], ['bee', 8], ['bumblebee', 3], ['grasshopper', 8], ['hawk', 1], ['hedgehog', 2], ['monarch', 4], ['ladybug', 3], ['snail', 3], ['starling', 6], ['cricket', 4], ['worm', 4]],
+      seeds: [['oak', 1], ['birch', 1], ['fruittree', 1], ['berrybush', 1], ['tallgrass', 3], ['sunflower', 1], ['tulip', 1]], tufts: ['tallgrass', 'tulip', 'lavender'],
+      gen(W, rng) {
+        G.scatter(W, rng, 'oak', W.w / 120, [M.GRASS], { gap: 8 });
+        G.scatter(W, rng, 'birch', W.w / 90, [M.GRASS], { gap: 4 });
+        G.scatter(W, rng, 'tallgrass', W.w / 3, [M.GRASS]);
+        G.scatter(W, rng, 'sunflower', W.w / 50, [M.GRASS]);
+        G.scatter(W, rng, 'lavender', W.w / 40, [M.GRASS]);
+        G.scatter(W, rng, 'berrybush', W.w / 70, [M.GRASS]);
+      },
+    },
+    desert: {
+      fauna: [['fennec', 2], ['jackrabbit', 3], ['roadrunner', 2], ['rattlesnake', 2], ['tortoise', 2], ['tarantula', 2], ['coyote', 1], ['dungbeetle', 3], ['gecko', 2], ['condor', 1]],
+      seeds: [['joshua', 1], ['pricklypear', 2], ['agave', 1]],
+      gen(W, rng) {
+        G.scatter(W, rng, 'joshua', W.w / 70, [M.SAND], { gap: 5 });
+        G.scatter(W, rng, 'pricklypear', W.w / 50, [M.SAND]);
+        G.scatter(W, rng, 'agave', W.w / 60, [M.SAND]);
+      },
+    },
+    lake: {
+      fauna: [['trout', 6], ['minnow', 12], ['pike', 1], ['catfish', 2], ['crayfish', 4], ['swan', 2], ['goose', 4], ['loon', 1], ['kingfisher', 1], ['otter', 2], ['beaver', 2], ['waterstrider', 6], ['mosquito', 6], ['toad', 3], ['newt', 3], ['snapper', 1], ['heronstand', 1], ['egret', 1], ['dragonfly2', 3]],
+      seeds: [['willow', 1], ['cattail', 2], ['birch', 1]], tufts: ['cattail'],
+      gen(W, rng) {
+        G.scatter(W, rng, 'willow', W.w / 90, [M.GRASS], { gap: 8 });
+        G.scatter(W, rng, 'birch', W.w / 80, [M.GRASS], { gap: 4 });
+        G.scatter(W, rng, 'cattail', W.w / 30, [M.GRASS, M.MUD, M.SAND]);
+      },
+    },
+    sea: {
+      fauna: [['sardine', 30], ['mackerel', 10], ['barracuda', 2], ['squid', 4], ['mantaray', 1], ['hammerhead', 1], ['greatwhite', 1], ['starfish', 4], ['lobster', 2], ['albatross', 2], ['pelican', 2], ['sealion', 3], ['lanternfish', 10], ['anglerfish', 1], ['swordfish', 1], ['urchin', 3], ['seaturtle2', 1]],
+      waterSeeds: [['kelp', 2], ['seaweed', 3], ['coral', 1], ['seagrass', 1]],
+      gen(W, rng) { G.scatter(W, rng, 'kelp', W.w / 12, [M.SAND, M.STONE], { floor: true }); },
+    },
+    beach: {
+      fauna: [['hermitcrab', 5], ['pelican', 2], ['sealion', 2], ['starfish', 3], ['jogger', 1], ['sailboat', 1], ['boat', 1], ['sardine', 12], ['puffin', 2]],
+      gen(W, rng) { G.scatter(W, rng, 'seagrass', W.w / 15, [M.SAND], { floor: true }); },
+    },
+    taiga: {
+      fauna: [['lynx', 1], ['elk', 2], ['grouse', 3], ['woodpecker', 2], ['chipmunk', 3], ['bear2', 1], ['raven', 2], ['hare', 3], ['salamander', 1], ['snail', 2]],
+      seeds: [['spruce', 3], ['birch', 1], ['fern2', 1], ['berrybush', 1], ['bigmushroom', 1]], tufts: ['fern2', 'mushroom'],
+      gen(W, rng) {
+        G.scatter(W, rng, 'spruce', W.w / 18, [M.GRASS], { gap: 3 });
+        G.scatter(W, rng, 'birch', W.w / 50, [M.GRASS], { gap: 3 });
+        G.scatter(W, rng, 'fern2', W.w / 10, [M.GRASS]);
+        G.scatter(W, rng, 'berrybush', W.w / 60, [M.GRASS]);
+        G.scatter(W, rng, 'bigmushroom', W.w / 90, [M.GRASS]);
+      },
+    },
+    snowy: { fauna: [['muskox', 3], ['lemming', 6], ['wolverine', 1], ['raven', 1]], seeds: [['spruce', 2]], gen(W, rng) { G.scatter(W, rng, 'spruce', W.w / 40, [M.SNOW], { gap: 3 }); } },
+    mountain: {
+      fauna: [['ibex', 4], ['pika', 4], ['snowleopard', 1], ['yak', 3], ['hawk', 1], ['raven', 1], ['bumblebee', 2]],
+      seeds: [['spruce', 2], ['lavender', 1]], tufts: ['lavender'],
+      gen(W, rng) { G.scatter(W, rng, 'spruce', W.w / 30, [M.GRASS], { gap: 2 }); G.scatter(W, rng, 'lavender', W.w / 30, [M.GRASS]); },
+    },
+    arctic: { fauna: [['narwhal', 2], ['beluga', 2], ['walrus', 3], ['puffin', 4], ['raven', 1]] },
+    rainforest: {
+      fauna: [['gorilla', 2], ['orangutan', 2], ['sloth', 2], ['tapir', 1], ['capuchin', 4], ['macaw', 3], ['scarletmacaw', 2], ['hornbill', 2], ['hummingbird', 4], ['iguana', 2], ['chameleon', 2], ['treefrog', 3], ['python', 1], ['piranha', 6], ['mantis', 2], ['caterpillar', 4], ['centipede', 2], ['cicada', 3]],
+      seeds: [['bamboo', 1], ['fern2', 2], ['bigmushroom', 1]], tufts: ['fern2'],
+      gen(W, rng) { G.scatter(W, rng, 'bamboo', W.w / 60, [M.GRASS], { gap: 3 }); G.scatter(W, rng, 'fern2', W.w / 8, [M.GRASS]); G.scatter(W, rng, 'bigmushroom', W.w / 80, [M.GRASS]); },
+    },
+    suburbs: {
+      fauna: [['robin', 2], ['sparrow', 6], ['cardinal', 2], ['bluejay', 2], ['raccoon', 2], ['skunk', 1], ['hedgehog', 1], ['bee', 6], ['ladybug', 3], ['snail', 3], ['jogger', 2], ['balloon', 1], ['dove', 3], ['starling', 4]],
+      seeds: [['cherry', 1], ['hedge', 1], ['tulip', 2], ['fruittree', 1], ['sunflower', 1]], tufts: ['tulip', 'tuft'],
+    },
+    wasteland: { fauna: [['raven', 2], ['fly', 10], ['mosquito', 4], ['centipede', 2], ['tarantula', 1]] },
+    prehistoric: {
+      fauna: [['stegosaurus', 2], ['ankylosaurus', 1], ['parasaurolophus', 3], ['pachy', 2], ['compy', 5], ['spinosaurus', 1], ['dimetrodon', 1], ['archaeopteryx', 3], ['trilobite', 4], ['ammonite', 3]],
+    },
+    anthill: {
+      fauna: [['worm', 6], ['centipede', 1], ['millipede', 2], ['snail', 2], ['slug', 2], ['mole', 1], ['caterpillar', 3], ['cricket', 2], ['stagbeetle', 1], ['glowworm', 3], ['bee', 3], ['grasshopper', 3]],
+      seeds: [['tallgrass', 2]], tufts: ['tallgrass'],
+    },
+  };
+  for (const b of B) {
+    // every biome gets the occasional windy day; stormy ones also dry lightning
+    b.weather = Object.assign({ windy: 0.6 }, b.weather);
+    if (b.weather.storm && !b.weather.drylightning && !b.weather.snow) b.weather.drylightning = 0.25;
+    const ex = EXTRA[b.id];
+    if (!ex) continue;
+    if (ex.fauna) b.fauna = b.fauna.concat(ex.fauna);
+    if (ex.seeds) b.seeds = (b.seeds || []).concat(ex.seeds);
+    if (ex.tufts) b.tufts = (b.tufts || []).concat(ex.tufts);
+    if (ex.waterSeeds) b.waterSeeds = ex.waterSeeds;
+    if (ex.gen) { const g0 = b.gen; b.gen = function (W, rng, eco) { g0.call(this, W, rng, eco); ex.gen(W, rng, eco); }; }
+  }
+
   DS.Biomes = B;
   DS.BiomeMap = Object.fromEntries(B.map((b) => [b.id, b]));
   DS.Gen = G;

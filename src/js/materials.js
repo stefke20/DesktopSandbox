@@ -52,6 +52,16 @@
     ['BASALT',    { kind: 'static', solid: true, colors: ['#4a4442', '#433e3c', '#524b48', '#3e3937'] }],
     ['SIDING',    { kind: 'static', veg: true, flammable: 0.01, burn: 80, colors: ['#e8d8b0', '#b8d0e0', '#e0b8b0', '#c8dcb8'] }],
     ['FACADE',    { kind: 'static', veg: true, colors: ['#6e6c68', '#64625e', '#787672', '#5a5854'] }],
+    ['AUTUMN',    { kind: 'static', veg: true, flammable: 0.07, burn: 22, edible: true, colors: ['#e0782a', '#c8402a', '#f0b030', '#d8602a'] }],
+    ['BLOSSOM',   { kind: 'static', veg: true, flammable: 0.06, burn: 20, edible: true, colors: ['#f8b8d0', '#ffd0e0', '#f098b8', '#fff0f4'] }],
+    ['BIRCH',     { kind: 'static', veg: true, flammable: 0.02, burn: 80, colors: ['#e8e4dc', '#f4f0e8', '#2a2a2a', '#dcd8d0'] }],
+    ['KELP',      { kind: 'static', veg: true, edible: true, colors: ['#6a6a24', '#7a7a2a', '#5a5a1e', '#8a8434'] }],
+    ['BAMBOO',    { kind: 'static', veg: true, flammable: 0.03, burn: 40, edible: true, colors: ['#8ac04a', '#7ab03e', '#9ad058', '#5a8a2a'] }],
+    ['TALLGRASS', { kind: 'static', veg: true, flammable: 0.12, burn: 10, edible: true, colors: ['#6ac44a', '#58b03c', '#7ad458', '#4a9a32'] }],
+    ['DRYGRASS',  { kind: 'static', solid: true, flammable: 0.2, burn: 12, edible: true, dig: true, colors: ['#c8b45a', '#b8a24a', '#d8c46a', '#a89040'] }],
+    ['BERRY',     { kind: 'static', veg: true, flammable: 0.05, burn: 10, edible: true, colors: ['#d02a3a', '#3a3ac8', '#e84a5a', '#6a2a8a'] }],
+    ['SPRING',    { kind: 'static', solid: true, colors: ['#3a6aa8', '#4a7ab8', '#2a5a98', '#5a8ac8'] }],
+    ['DRAIN',     { kind: 'static', solid: true, colors: ['#1a1a22', '#22222a', '#141418', '#2a2a32'] }],
     ['FUNGUS',    { kind: 'static', veg: true, edible: true, colors: ['#e8dcc0', '#d8c8a8', '#f4ead4', '#cbb994'] }],
   ];
 

@@ -8,7 +8,7 @@
 
   // Static materials that need occasional updates
   const ACTIVE_STATIC = new Uint8Array(M.COUNT);
-  [M.GRASS, M.WOOD, M.LEAF, M.ICE, M.EMBERS, M.VENT].forEach((t) => (ACTIVE_STATIC[t] = 1));
+  [M.GRASS, M.DRYGRASS, M.WOOD, M.BIRCH, M.BAMBOO, M.LEAF, M.AUTUMN, M.BLOSSOM, M.ICE, M.EMBERS, M.VENT, M.SPRING, M.DRAIN, M.PLANT, M.TALLGRASS, M.FLOWER].forEach((t) => (ACTIVE_STATIC[t] = 1));
 
   // Darker palette variants for cells deep below the surface
   const DEPTH_LEVELS = 8;
@@ -22,6 +22,9 @@
     }
   }
   const SOLID = MP.solid;
+
+  const UNDERWATER = new Uint8Array(M.COUNT);
+  [M.SEAWEED, M.KELP, M.CORAL].forEach((t) => (UNDERWATER[t] = 1));
 
   const N8 = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]];
 
@@ -45,7 +48,7 @@
         const x = this.x + dx, y = this.y + dy;
         if (!world.inb(x, y)) continue;
         const t = world.get(x, y);
-        if (t === M.EMPTY || (MP.veg[t] && t !== M.WOOD) || t === M.SNOW) world.set(x, y, mat, life || 0, shade);
+        if (t === M.EMPTY || (MP.veg[t] && t !== M.WOOD) || t === M.SNOW || (t === M.WATER && UNDERWATER[mat])) world.set(x, y, mat, life || 0, shade);
       }
       if (this.i >= this.list.length) this.done = true;
     }
@@ -81,8 +84,10 @@
       this.tuftRate = 0.0004;
       this.tuftKinds = ['tuft'];
       this.seedKinds = [['tree', 1]];
+      this.waterSeeds = [['seaweed', 3], ['coral', 1]];
       this.ventRate = 0.002;
       this.lapse = 0;
+      this.drought = 0;
       this.backY = null;
       this.setWater('#4a90d9', '#0c2a5a');
     }
@@ -161,7 +166,7 @@
     }
 
     addGrower(x, y, kind, rng) {
-      if (this.growers.length > 120) return;
+      if (this.growers.length > 400) return;
       this.growers.push(new Grower(x, y, DS.Flora.build(kind, rng)));
     }
 
@@ -171,7 +176,7 @@
         const px = x + dx, py = y + dy;
         if (!this.inb(px, py)) continue;
         const t = this.get(px, py);
-        if (overwrite || t === M.EMPTY || (MP.veg[t] && mat !== M.LEAF && mat !== M.NEEDLE) || (t === M.WATER && (mat === M.SEAWEED || mat === M.CORAL))) {
+        if (overwrite || t === M.EMPTY || (MP.veg[t] && mat !== M.LEAF && mat !== M.NEEDLE) || (t === M.WATER && UNDERWATER[mat])) {
           this.set(px, py, mat, life || 0, shade);
         }
       }
@@ -259,10 +264,10 @@
       const inWater = this.isLiquid(x, y - 1) || this.get(x, y - 1) === M.WATER;
       if (inWater && (below === M.SAND || below === M.DIRT || below === M.SOIL || below === M.MUD || below === M.STONE)) {
         this.cells[i] = M.SEAWEED;
-        this.addGrower(x, y, Math.random() < 0.25 ? 'coral' : 'seaweed');
+        this.addGrower(x, y, U.weighted(this.waterSeeds));
         return;
       }
-      if (below === M.DIRT || below === M.SOIL || below === M.GRASS || below === M.MUD || below === M.SAND || below === M.SNOW || below === M.ASH) {
+      if (below === M.DIRT || below === M.SOIL || below === M.GRASS || below === M.DRYGRASS || below === M.MUD || below === M.SAND || below === M.SNOW || below === M.ASH) {
         let kind = U.weighted(this.seedKinds);
         if (below === M.SAND && kind !== 'cactus' && kind !== 'palm' && kind !== 'deadbush' && Math.random() < 0.6) kind = 'tuft';
         this.cells[i] = M.PLANT;
@@ -291,7 +296,7 @@
               (x === 0 || cells[i - 1] !== M.WATER) && (x === w - 1 || cells[i + 1] !== M.WATER)) {
             cells[i] = 0; return; // puddle dries
           }
-          if (this.temp > 24 && this.daylight > 0.5 && Math.random() < 0.0002) { cells[i] = 0; return; }
+          if ((this.temp > 24 && this.daylight > 0.5 && Math.random() < 0.0002) || (this.drought > 0 && Math.random() < 0.004 * this.drought)) { cells[i] = 0; return; }
         }
       } else if (t === M.TOXIC) {
         if (Math.random() < 0.05) {
@@ -407,6 +412,7 @@
           if (r > 0.02) return;
           const above = y > 0 ? cells[i - w] : 0;
           if (MP.solid[above] && above !== M.SNOW) { this.set(x, y, M.DIRT); return; }
+          if (this.drought > 0 && r < 0.004) { this.set(x, y, M.DRYGRASS); return; }
           if (this.temp < -2) return;
           if (r < 0.012 * this.fertility) {
             const dx = Math.random() < 0.5 ? -1 : 1;
@@ -419,17 +425,39 @@
           }
           return;
         }
-        case M.WOOD: {
+        case M.WOOD: case M.BIRCH: case M.BAMBOO: {
+          // life holds the foliage material to regrow (1 = leaf, 2 = needle, else a material id)
           const code = this.life[i];
-          if (code === 0 || r > 0.004 * this.fertility || this.temp < -8) return;
+          if (code === 0 || r > 0.004 * this.fertility || this.temp < -8 || this.drought > 0) return;
           const dx = ((Math.random() * 7) | 0) - 3, dy = ((Math.random() * 7) | 0) - 3;
           const nx = x + dx, ny = y + dy;
-          if (this.get(nx, ny) === M.EMPTY) this.set(nx, ny, code === 2 ? M.NEEDLE : M.LEAF);
+          if (this.get(nx, ny) === M.EMPTY) this.set(nx, ny, code === 1 ? M.LEAF : code === 2 ? M.NEEDLE : code);
           return;
         }
-        case M.LEAF:
-          if (r < this.leafFall && y < this.h - 1 && cells[i + w] === 0) this.set(x, y, M.LITTER);
+        case M.DRYGRASS:
+          if (r < 0.0004 && this.drought <= 0 && this.temp > 2) this.set(x, y, M.GRASS);
           return;
+        case M.PLANT: case M.TALLGRASS: case M.FLOWER:
+          if (this.drought > 0 && r < 0.0006) this.set(x, y, t === M.FLOWER ? M.EMPTY : M.LITTER, 0, 1);
+          return;
+        case M.SPRING:
+          if (r < 0.35) {
+            const [dx, dy] = N8[(Math.random() * 8) | 0];
+            if (dy >= 0 && this.get(x + dx, y + dy) === M.EMPTY) this.set(x + dx, y + dy, M.WATER);
+          }
+          return;
+        case M.DRAIN:
+          for (let k = 0; k < 2; k++) {
+            const [dx, dy] = N8[(Math.random() * 8) | 0];
+            const nt = this.get(x + dx, y + dy);
+            if (K[nt] === KL || K[nt] === KG) this.set(x + dx, y + dy, M.EMPTY);
+          }
+          return;
+        case M.LEAF: case M.AUTUMN: case M.BLOSSOM: {
+          const fall = this.leafFall * (t === M.LEAF ? 1 : 4) * (this.drought > 0 ? 20 : 1) * (1 + Math.abs(this.wind) * 3);
+          if (r < fall && y < this.h - 1 && cells[i + w] === 0) this.set(x, y, M.LITTER, 0, t === M.LEAF ? undefined : t === M.AUTUMN ? 0 : 3);
+          return;
+        }
         case M.ICE:
           if (r < 0.003) { const tt = this.tempAt(y); if (tt > 2 && r < 0.0003 * (tt - 1)) this.set(x, y, M.WATER); }
           return;
@@ -497,11 +525,11 @@
         for (let x = 0; x < w; x++) {
           const i = row + x;
           const t = cells[i];
-          if (t === 0) { buf[i] = 0; depth[x] = 0; wseen[x] = 0; sdepth[x] = 0; continue; }
+          if (t === 0) { buf[i] = 0; depth[x] = 0; wseen[x] = 0; if (sdepth[x] < 12) sdepth[x] = 0; continue; }
           if (t === M.WATER) {
             const d = depth[x]++;
             wseen[x] = 1;
-            sdepth[x] = 0;
+            if (sdepth[x] < 12) sdepth[x] = 0;
             buf[i] = d === 0 && (y === 0 || cells[i - w] === 0) ? this.waterTop : this.waterPal[d > 39 ? 39 : d];
             continue;
           }

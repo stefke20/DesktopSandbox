@@ -10,7 +10,20 @@
     ['SNOW', 'Snow'], ['ICE', 'Ice'], ['FIRE', 'Fire'], ['OIL', 'Oil'], ['TOXIC', 'Toxic sludge'],
     ['SEED', 'Seeds'], ['GRASS', 'Grass'], ['WOOD', 'Wood'], ['LEAF', 'Leaves'], ['MUD', 'Mud'],
     ['BRICK', 'Brick'], ['GLASS', 'Glass'], ['CONCRETE', 'Concrete'], ['METAL', 'Metal'], ['ASH', 'Ash'],
-    ['VENT', 'Lava vent'], ['EMBERS', 'Eternal flame'], ['SMOKE', 'Smoke'], ['STEAM', 'Steam'], ['ERASE', 'Eraser'],
+    ['VENT', 'Lava vent'], ['EMBERS', 'Eternal flame'], ['SPRING', 'Spring'], ['DRAIN', 'Drain'], ['SOIL', 'Soil'],
+    ['BASALT', 'Basalt'], ['SMOKE', 'Smoke'], ['STEAM', 'Steam'], ['ERASE', 'Eraser'],
+  ];
+
+  const TERRAIN = [
+    ['raise', '⬆️', 'Raise land'], ['lower', '⬇️', 'Lower / dig'], ['flatten', '➖', 'Flatten'],
+    ['mountain', '🏔️', 'Mountain (click)'], ['lake', '💧', 'Lake (click)'], ['island', '🏝️', 'Island (click)'],
+  ];
+  const TERRAIN_MATS = [['soil', 'Soil & grass'], ['stone', 'Stone'], ['sand', 'Sand'], ['snow', 'Snow'], ['clay', 'Mud']];
+  const FLORA_GROUPS = [
+    ['Trees', ['tree', 'oak', 'birch', 'maple', 'cherry', 'willow', 'fruittree', 'pine', 'spruce', 'cypress', 'palm', 'jungle', 'baobab', 'acacia', 'mangrove', 'joshua', 'deadtree']],
+    ['Shrubs & desert', ['bush', 'berrybush', 'hedge', 'bamboo', 'deadbush', 'cactus', 'pricklypear', 'agave', 'fern', 'fern2']],
+    ['Grasses & flowers', ['tuft', 'tallgrass', 'flower', 'tulip', 'lavender', 'sunflower', 'reed', 'cattail', 'mushroom', 'bigmushroom']],
+    ['Water plants', ['lily', 'seaweed', 'seagrass', 'kelp', 'coral', 'anemone']],
   ];
 
   const POWERS = [
@@ -30,7 +43,7 @@
   const WEATHER = [
     ['auto', '🔁', 'Auto'], ['clear', '☀️', 'Clear'], ['cloudy', '☁️', 'Cloudy'], ['rain', '🌧️', 'Rain'],
     ['storm', '⛈️', 'Thunderstorm'], ['snow', '🌨️', 'Snow'], ['sandstorm', '🌪️', 'Sandstorm'],
-    ['ashfall', '🌋', 'Ash fall'], ['fog', '🌫️', 'Fog'],
+    ['ashfall', '🌋', 'Ash fall'], ['fog', '🌫️', 'Fog'], ['drylightning', '🌩️', 'Dry lightning'], ['windy', '💨', 'Windy'],
   ];
 
   const el = (tag, attrs = {}, ...kids) => {
@@ -87,8 +100,21 @@
       cv.addEventListener('contextmenu', (e) => e.preventDefault());
       cv.addEventListener('wheel', (e) => {
         e.preventDefault();
-        this.setBrush(this.brush + (e.deltaY < 0 ? 1 : -1));
+        this.app.poke();
+        if (e.shiftKey || e.ctrlKey || e.altKey) this.setBrush(this.brush + (e.deltaY < 0 ? 1 : -1));
+        else {
+          this.wheelAcc = (this.wheelAcc || 0) + e.deltaY;
+          if (Math.abs(this.wheelAcc) >= 60) { this.app.zoomBy(this.wheelAcc < 0 ? 1 : -1, e.clientX, e.clientY); this.wheelAcc = 0; }
+        }
       }, { passive: false });
+      cv.addEventListener('dblclick', (e) => {
+        if (this.tool.kind !== 'hand') return;
+        const p = this.toWorld(e);
+        const c = this.eco.at(p[0], p[1], 6);
+        if (c) { this.app.follow = c; if (this.app.cam.z < 3) this.app.setZoom(3, e.clientX, e.clientY); this.app.toast(`👁 Following ${c.sp.name}`); }
+      });
+      document.getElementById('zoom-in').addEventListener('click', () => this.app.zoomBy(1));
+      document.getElementById('zoom-out').addEventListener('click', () => this.app.zoomBy(-1));
       window.addEventListener('keydown', (e) => this.onKey(e));
     }
 
@@ -128,24 +154,59 @@
             g.append(el('button', { class: 'chip' + (active ? ' active' : ''), onclick: () => { this.setTool({ kind: 'paint', mat: name }, label); this.renderPanel(); } },
               el('span', { class: 'sw', style: `background:${col};${name === 'ERASE' ? 'border:1px dashed #aaa' : ''}` }), label));
           }
-          p.append(g, brushRow(), el('div', { class: 'hint', html: 'Left-drag to paint · right-drag to erase · mouse wheel changes brush size.' }));
+          p.append(g, brushRow(), el('div', { class: 'hint', html: 'Left-drag to paint · right-drag to erase · <kbd>Shift</kbd>+wheel or <kbd>[</kbd> <kbd>]</kbd> changes brush size.' }));
           break;
         }
         case 'life': {
           const native = (app.biome.fauna || []).map(([id]) => id);
-          const chip = (id) => {
-            const sp = S[id];
-            const active = this.tool.kind === 'spawn' && this.tool.id === id;
-            return el('button', { class: 'chip' + (active ? ' active' : ''), title: sp.name, onclick: () => { this.setTool({ kind: 'spawn', id }, sp.name); this.renderPanel(); } },
-              el('img', { src: DS.Sprites.icon(sp, 3) }), sp.name);
-          };
-          p.append(el('h4', {}, `Native to ${app.biome.name}`));
-          const g1 = el('div', { class: 'grid' });
-          native.forEach((id) => g1.append(chip(id)));
-          p.append(g1, el('h4', {}, 'All creatures'));
+          const cat = this.lifeCat || 'native';
+          const tabs = el('div', { class: 'tabs' });
+          for (const [c, l] of [['native', `Native to ${app.biome.name}`]].concat(DS.SpeciesCats))
+            tabs.append(el('button', { class: 'chip' + (cat === c ? ' active' : ''), onclick: () => { this.lifeCat = c; this.lifeQ = ''; this.renderPanel(); } }, l));
+          const search = el('input', { type: 'search', placeholder: `Search ${Object.keys(S).length} creatures…`, value: this.lifeQ || '' });
+          search.addEventListener('input', () => { this.lifeQ = search.value; this.renderLifeGrid(grid, native); });
+          search.addEventListener('keydown', (e) => e.stopPropagation());
+          p.append(tabs, el('div', { class: 'row' }, search));
+          const grid = el('div', { class: 'grid' });
+          p.append(grid, el('div', { class: 'hint', html: 'Click to create; hold and drag to create several. Sea creatures look for the nearest water. Double-click a creature with the hand to follow it.' }));
+          this.renderLifeGrid(grid, native);
+          break;
+        }
+        case 'terrain': {
+          p.append(el('h4', {}, 'Landscape'));
+          const g = el('div', { class: 'grid' });
+          for (const [id, icon, label] of TERRAIN) {
+            const active = this.tool.kind === 'terrain' && this.tool.id === id;
+            g.append(el('button', { class: 'chip' + (active ? ' active' : ''), onclick: () => { this.setTool({ kind: 'terrain', id }, label); this.renderPanel(); } }, `${icon} ${label}`));
+          }
           const g2 = el('div', { class: 'grid' });
-          Object.keys(S).filter((id) => !native.includes(id)).sort((a, b) => S[a].name.localeCompare(S[b].name)).forEach((id) => g2.append(chip(id)));
-          p.append(g2, el('div', { class: 'hint', html: 'Click to create; hold and drag to create several. Sea creatures look for the nearest water.' }));
+          for (const [id, label] of TERRAIN_MATS) g2.append(el('button', { class: 'chip' + ((this.terrainMat || 'soil') === id ? ' active' : ''), onclick: () => { this.terrainMat = id; this.renderPanel(); } }, label));
+          p.append(g, el('div', { class: 'row' }, el('label', {}, 'Raise with'), g2), brushRow());
+          for (const [title, kinds] of FLORA_GROUPS) {
+            p.append(el('h4', {}, title));
+            const gg = el('div', { class: 'grid' });
+            for (const k of kinds) {
+              const active = this.tool.kind === 'plant' && this.tool.id === k;
+              gg.append(el('button', { class: 'chip' + (active ? ' active' : ''), onclick: () => { this.setTool({ kind: 'plant', id: k }, 'Plant ' + DS.Flora.labels[k]); this.renderPanel(); } }, DS.Flora.labels[k]));
+            }
+            p.append(gg);
+          }
+          p.append(el('div', { class: 'hint', html: 'Drag to raise, dig or flatten the ground; click to drop a mountain (click height sets the peak), lake or island. Plants grow where you drag. Paint has springs and drains for rivers.' }));
+          break;
+        }
+        case 'events': {
+          p.append(el('h4', {}, 'Special events'));
+          const g = el('div', { class: 'grid' });
+          for (const id in DS.Events.DEFS) {
+            const [label, icon, positional] = DS.Events.DEFS[id];
+            const active = this.tool.kind === 'event' && this.tool.id === id;
+            const running = app.events.active(id);
+            g.append(el('button', { class: 'chip' + (active || running ? ' active' : ''), onclick: () => {
+              if (positional) { this.setTool({ kind: 'event', id }, `${label}: click where`); this.openTab(null); }
+              else { app.events.start(id); this.renderPanel(); }
+            } }, `${icon} ${label}`));
+          }
+          p.append(g, el('div', { class: 'hint', html: 'Volcano, alien abduction, tornado and black hole: pick one, then click in the world to place it. The others start straight away.' }));
           break;
         }
         case 'powers': {
@@ -195,6 +256,22 @@
       }
     }
 
+    renderLifeGrid(grid, native) {
+      grid.innerHTML = '';
+      const q = (this.lifeQ || '').trim().toLowerCase();
+      const cat = this.lifeCat || 'native';
+      let ids = q ? Object.keys(S).filter((id) => S[id].name.toLowerCase().includes(q) || id.includes(q))
+        : cat === 'native' ? native : Object.keys(S).filter((id) => S[id].cat === cat);
+      if (q || cat !== 'native') ids = ids.sort((a, b) => S[a].name.localeCompare(S[b].name));
+      for (const id of ids.slice(0, 200)) {
+        const sp = S[id];
+        const active = this.tool.kind === 'spawn' && this.tool.id === id;
+        grid.append(el('button', { class: 'chip' + (active ? ' active' : ''), title: sp.name, onclick: () => { this.setTool({ kind: 'spawn', id }, sp.name); this.renderLifeGrid(grid, native); } },
+          el('img', { src: DS.Sprites.icon(sp, sp.w > 16 ? 1 : sp.w > 9 ? 2 : 3) }), sp.name));
+      }
+      if (!ids.length) grid.append(el('div', { class: 'hint' }, 'No creatures match.'));
+    }
+
     renderSettings(p) {
       const app = this.app, st = app.settings;
       const select = (key, opts, onChange) => {
@@ -224,7 +301,7 @@
           el('div', { class: 'row' }, el('button', { class: 'chip', onclick: () => d.setClickThrough(true) }, '👻 Watch only (click-through)'), el('button', { class: 'chip', onclick: () => d.quit() }, '⏻ Quit')),
           el('div', { class: 'hint', html: 'In watch-only mode clicks pass through to your desktop. Press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>G</kbd> (or use the tray icon) to play god again.' }));
       }
-      p.append(el('div', { class: 'hint', html: 'Keys: <kbd>H</kbd> hide controls · <kbd>Space</kbd> pause · <kbd>B</kbd> next biome · <kbd>N</kbd> day/night · <kbd>R</kbd> rain · <kbd>I</kbd> population · <kbd>[</kbd> <kbd>]</kbd> brush · <kbd>Esc</kbd> hand' }));
+      p.append(el('div', { class: 'hint', html: 'Keys: <kbd>H</kbd> hide controls · <kbd>Space</kbd> pause · mouse wheel or <kbd>+</kbd> <kbd>-</kbd> zoom · drag or <kbd>WASD</kbd> to pan when zoomed · <kbd>0</kbd> reset zoom · <kbd>B</kbd> next biome · <kbd>N</kbd> day/night · <kbd>R</kbd> rain · <kbd>I</kbd> population · <kbd>[</kbd> <kbd>]</kbd> brush · <kbd>Esc</kbd> hand' }));
     }
 
     setTool(tool, label) {
@@ -235,20 +312,21 @@
 
     // ------------------------------------------------------------ input
     toWorld(e) {
-      const s = this.app.scale;
-      return [e.clientX / s, e.clientY / s];
+      const v = this.app.view();
+      return [v.x + e.clientX / v.s, v.y + e.clientY / v.s];
     }
 
     onDown(e) {
       this.app.poke();
       const p = this.toWorld(e);
+      if (e.button === 1) { this.panning = [e.clientX, e.clientY]; e.preventDefault(); return; }
       this.pos = p;
       this.last = p;
       this.down = true;
       this.button = e.button;
       this.timer = 0;
       this.app.canvas.setPointerCapture && this.app.canvas.setPointerCapture(e.pointerId);
-      if (this.tab && this.tab !== 'paint' && this.tab !== 'powers' && this.tab !== 'life') this.openTab(null);
+      if (this.tab && !['paint', 'powers', 'life', 'terrain'].includes(this.tab)) this.openTab(null);
       if (this.tool.kind === 'hand' && e.button === 0) {
         const c = this.eco.at(p[0], p[1], 6);
         if (c) {
@@ -256,6 +334,9 @@
           c.held = true;
           c.perched = false;
           c.sleep = false;
+          document.body.classList.add('grabbing');
+        } else if (this.app.cam.z > 1) {
+          this.panning = [e.clientX, e.clientY];
           document.body.classList.add('grabbing');
         }
         return;
@@ -265,10 +346,18 @@
         if (def && def[3]) this.power(this.tool.id, p[0], p[1]);
       }
       if (this.tool.kind === 'spawn') this.spawn(this.tool.id, p[0], p[1]);
+      if (this.tool.kind === 'event') { this.app.events.start(this.tool.id, p[0], p[1]); this.down = false; return; }
+      if (this.tool.kind === 'terrain' && ['mountain', 'lake', 'island'].includes(this.tool.id)) { this.terraformClick(this.tool.id, p[0], p[1]); this.down = false; return; }
+      if (this.tool.kind === 'terrain' && this.tool.id === 'flatten') this.flatY = Math.round(p[1]);
       this.apply();
     }
 
     onMove(e) {
+      if (this.panning) {
+        const s = this.app.view().s;
+        this.app.panBy(-(e.clientX - this.panning[0]) / s, -(e.clientY - this.panning[1]) / s);
+        this.panning = [e.clientX, e.clientY];
+      }
       const p = this.toWorld(e);
       if (this.pos) this.vel = [p[0] - this.pos[0], p[1] - this.pos[1]];
       this.pos = p;
@@ -281,6 +370,7 @@
     }
 
     onUp() {
+      if (this.panning) { this.panning = null; document.body.classList.remove('grabbing'); }
       if (this.held) {
         const c = this.held;
         c.held = false;
@@ -322,9 +412,17 @@
         case 'n': case 'N': app.setTime(app.daylight > 0.5 ? 0 : 0.5); break;
         case 'r': case 'R': app.setWeather(app.weather.type === 'rain' && !app.weather.auto ? 'clear' : 'rain'); break;
         case 'i': case 'I': app.setSetting('showStats', !app.settings.showStats); break;
+        case '+': case '=': app.zoomBy(1); break;
+        case '-': case '_': app.zoomBy(-1); break;
+        case '0': app.setZoom(1); break;
+        case 'ArrowLeft': case 'a': case 'A': app.panBy(-12 / app.cam.z, 0); break;
+        case 'ArrowRight': case 'd': case 'D': app.panBy(12 / app.cam.z, 0); break;
+        case 'ArrowUp': case 'w': case 'W': app.panBy(0, -8 / app.cam.z); break;
+        case 'ArrowDown': case 's': case 'S': app.panBy(0, 8 / app.cam.z); break;
+        case 'f': case 'F': app.follow = null; break;
         case '[': this.setBrush(this.brush - 1); break;
         case ']': this.setBrush(this.brush + 1); break;
-        case 'Escape': this.setTool({ kind: 'hand' }, 'Hand'); this.openTab(null); break;
+        case 'Escape': this.setTool({ kind: 'hand' }, 'Hand'); this.openTab(null); app.follow = null; break;
         default: return;
       }
       this.refresh();
@@ -347,6 +445,19 @@
           break;
         case 'spawn':
           if (this.timer > 0 && this.timer % 12 === 0) this.spawn(t.id, x + U.rand(-this.brush, this.brush), y);
+          break;
+        case 'terrain': {
+          const W = this.world, cx = Math.round(x);
+          if (this.timer % 2) break;
+          if (t.id === 'raise') DS.Terrain.raise(W, cx, this.brush, this.terrainMat || 'soil');
+          else if (t.id === 'lower') DS.Terrain.lower(W, cx, this.brush);
+          else if (t.id === 'flatten') DS.Terrain.flatten(W, cx, this.brush, this.flatY == null ? Math.round(y) : this.flatY);
+          break;
+        }
+        case 'plant':
+          if (this.timer % 8 === 0) {
+            for (let k = 0; k < Math.max(1, this.brush / 6); k++) DS.Terrain.plantAt(this.world, x + U.rand(-this.brush, this.brush), y - this.brush, t.id);
+          }
           break;
         case 'power': {
           const def = POWERS.find((q) => q[0] === t.id);
@@ -417,6 +528,16 @@
       }
     }
 
+    terraformClick(id, x, y) {
+      const W = this.world, r = Math.max(4, this.brush * 2);
+      if (id === 'mountain') {
+        const g = W.floorY(U.clamp(Math.round(x), 0, W.w - 1));
+        DS.Terrain.mountain(W, Math.round(x), Math.min(Math.round(y), g - 8), { half: g - y > 4 ? undefined : r * 2 });
+      } else if (id === 'lake') DS.Terrain.lake(W, x, r);
+      else if (id === 'island') DS.Terrain.island(W, x, r);
+      this.app.weather.shake = Math.max(this.app.weather.shake, 8);
+    }
+
     power(id, x, y) {
       const app = this.app, W = this.world, eco = this.eco, fx = eco.fx;
       const r = this.brush;
@@ -480,17 +601,19 @@
       }
     }
 
-    drawOverlay(ctx, scale) {
+    drawOverlay(ctx, v) {
+      document.getElementById('zoom-label').textContent = this.app.cam.z + '×';
       if (!this.pos || document.body.classList.contains('idle')) return;
       const t = this.tool;
       if (t.kind === 'hand') return;
-      const showBrush = t.kind === 'paint' || (t.kind === 'power' && ['smite', 'bless', 'grow', 'feed'].includes(t.id));
+      const showBrush = t.kind === 'paint' || t.kind === 'plant' || (t.kind === 'terrain' && !['mountain', 'lake', 'island'].includes(t.id)) || (t.kind === 'power' && ['smite', 'bless', 'grow', 'feed'].includes(t.id));
+      const big = t.kind === 'terrain' && ['lake', 'island'].includes(t.id) ? Math.max(4, this.brush * 2) : 0;
       ctx.save();
       ctx.strokeStyle = 'rgba(255,255,255,0.55)';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      const r = showBrush ? (this.brush + 0.5) * scale : 4 * scale;
-      ctx.arc(this.pos[0] * scale, this.pos[1] * scale, r, 0, Math.PI * 2);
+      const r = (big || (showBrush ? this.brush + 0.5 : 4)) * v.s;
+      ctx.arc((this.pos[0] - v.x) * v.s, (this.pos[1] - v.y) * v.s, r, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }

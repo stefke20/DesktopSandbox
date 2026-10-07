@@ -60,6 +60,10 @@
       this.lastInput = performance.now();
       this.cycleT = 0;
       this.desk = { mode: 'window', alwaysOnTop: false, openAtLogin: false };
+      this.cam = { z: 1, x: 0, y: 0 };
+      this.follow = null;
+      this.flare = false;
+      this.events = new DS.Events(this);
       this.god = new DS.God(this);
       this.applyBodyClasses();
       this.loadBiome(this.settings.biome);
@@ -94,6 +98,7 @@
 
     // ------------------------------------------------------------ world lifecycle
     loadBiome(id, seed) {
+      if (this.events && this.world) this.events.clear();
       const biome = DS.BiomeMap[id] || DS.Biomes[0];
       this.biome = biome;
       this.settings.biome = biome.id;
@@ -112,6 +117,7 @@
       W.leafFall = biome.leafFall != null ? biome.leafFall : 0.00002;
       W.fertility = biome.fertility != null ? biome.fertility : 1;
       W.lapse = biome.lapse || 0;
+      W.waterSeeds = biome.waterSeeds || [['seaweed', 3], ['coral', 1]];
       W.ventRate = biome.ventRate || 0.002;
       W.shadeDepth = !biome.noShade;
       const fx = new DS.FX(W);
@@ -144,7 +150,10 @@
       this.canvas.style.height = h * scale + 'px';
       this.ctx.imageSmoothingEnabled = false;
       this.cycleT = 0;
-      if (this.god) this.god.refresh();
+      this.follow = null;
+      this.cam = { z: this.cam ? this.cam.z : 1, x: w / 2, y: h / 2 };
+      this.clampCam();
+      if (this.god) { this.god.refresh(); this.updateHud(); }
     },
 
     nextBiome(d) {
@@ -241,10 +250,12 @@
       if (this.tempOffsetT > 0) { this.tempOffsetT--; if (this.tempOffsetT < 600) this.tempOffset *= 0.995; } else this.tempOffset = 0;
       const wt = this.weather.type;
       const wAdj = (wt === 'rain' || wt === 'storm' ? -2 : wt === 'snow' ? -5 : 0) * this.weather.intensity;
-      W.temp = this.biome.temp + (this.daylight - 0.5) * 8 + wAdj + this.tempOffset;
+      W.temp = this.biome.temp + (this.daylight - 0.5) * 8 + wAdj + this.tempOffset + this.events.tempOffset();
       W.daylight = this.daylight;
       eco.daylight = this.daylight;
+      eco.flare = this.flare;
       this.weather.update(this.daylight);
+      this.events.update();
       W.step();
       eco.update();
       this.fx.update();
@@ -292,13 +303,16 @@
       dark *= 1 - Math.min(1, this.weather.flash);
       sctx.globalCompositeOperation = 'source-over';
       sctx.drawImage(this.bg.render(this.time, daylight, this.weather), 0, 0);
-      this.bg.drawDynamic(sctx, this.time, daylight, this.frame);
+      this.bg.drawDynamic(sctx, this.time, daylight, this.frame, this.flare);
       this.weather.drawClouds(sctx, daylight, this.bg.skyBottom || [200, 220, 240]);
-      W.render(this.buf, dark);
+      W.render(this.buf, this.flare ? 0 : dark);
       this.cctx.putImageData(this.img, 0, 0);
       sctx.drawImage(this.cells, 0, 0);
       const lights = W.lights;
       this.eco.draw(sctx, lights, dark);
+      for (const l of this.events.pendingLights || []) lights.push(l);
+      this.events.pendingLights = [];
+      this.events.drawWorld(sctx);
       for (const m of this.meteors) {
         sctx.fillStyle = '#fff4c0';
         sctx.fillRect(Math.round(m.x) - 1, Math.round(m.y) - 1, 3, 3);
@@ -306,6 +320,7 @@
       }
       this.fx.draw(sctx);
       this.weather.drawFront(sctx, daylight);
+      this.events.drawOverlay(sctx);
 
       if (dark > 0.03) {
         const L = this.lctx;
@@ -337,16 +352,65 @@
         ox = Math.round(U.rand(-a, a));
         oy = Math.round(U.rand(-a, a));
       }
+      if (this.follow) {
+        if (this.follow.dead) this.follow = null;
+        else { this.cam.x += (this.follow.x - this.cam.x) * 0.15; this.cam.y += (this.follow.cy - this.cam.y) * 0.15; this.clampCam(); }
+      }
+      const v = this.view();
       ctx.imageSmoothingEnabled = false;
       ctx.fillStyle = '#000';
       if (ox || oy) ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-      ctx.drawImage(this.scene, ox, oy, W.w * s, W.h * s);
-      this.god.drawOverlay(ctx, s);
+      ctx.drawImage(this.scene, v.x, v.y, v.w, v.h, ox, oy, v.w * v.s, v.h * v.s);
+      this.god.drawOverlay(ctx, v);
+    },
+
+    // ------------------------------------------------------------ camera
+    view() {
+      const W = this.world, z = this.cam.z;
+      const w = W.w / z, h = W.h / z;
+      return { x: U.clamp(Math.round(this.cam.x - w / 2), 0, Math.max(0, Math.floor(W.w - w))), y: U.clamp(Math.round(this.cam.y - h / 2), 0, Math.max(0, Math.floor(W.h - h))), w, h, s: this.scale * z, z };
+    },
+    clampCam() {
+      const W = this.world, z = this.cam.z;
+      const hw = W.w / z / 2, hh = W.h / z / 2;
+      this.cam.x = U.clamp(this.cam.x, hw, W.w - hw);
+      this.cam.y = U.clamp(this.cam.y, hh, W.h - hh);
+    },
+    // zoom keeping the world point under screen position (sx, sy) fixed
+    zoomBy(dir, sx = window.innerWidth / 2, sy = window.innerHeight / 2) {
+      const levels = [1, 1.5, 2, 3, 4, 6, 8];
+      let i = levels.findIndex((l) => l >= this.cam.z - 0.01);
+      i = U.clamp(i + dir, 0, levels.length - 1);
+      this.setZoom(levels[i], sx, sy);
+    },
+    setZoom(z, sx = window.innerWidth / 2, sy = window.innerHeight / 2) {
+      const v = this.view();
+      const wx = v.x + sx / v.s, wy = v.y + sy / v.s;
+      this.cam.z = z;
+      const s = this.scale * z;
+      this.cam.x = wx - sx / s + this.world.w / z / 2;
+      this.cam.y = wy - sy / s + this.world.h / z / 2;
+      this.clampCam();
+      this.updateHud();
+    },
+    panBy(dx, dy) {
+      this.follow = null;
+      this.cam.x += dx;
+      this.cam.y += dy;
+      this.clampCam();
+    },
+    toast(text) {
+      const t = document.getElementById('toast');
+      if (!t) return;
+      t.textContent = text;
+      t.classList.add('show');
+      clearTimeout(this.toastT);
+      this.toastT = setTimeout(() => t.classList.remove('show'), 2600);
     },
 
     updateHud() {
       const h = Math.floor(this.time * 24), m = Math.floor((this.time * 24 * 60) % 60);
-      const wIcons = { clear: '☀️', cloudy: '☁️', rain: '🌧️', storm: '⛈️', snow: '🌨️', sandstorm: '🌪️', ashfall: '🌋', fog: '🌫️' };
+      const wIcons = { clear: '☀️', cloudy: '☁️', rain: '🌧️', storm: '⛈️', drylightning: '🌩️', windy: '💨', snow: '🌨️', sandstorm: '🌪️', ashfall: '🌋', fog: '🌫️' };
       let wt = this.weather.type;
       if ((wt === 'rain' || wt === 'storm') && this.world.temp < 0) wt = 'snow';
       const icon = this.daylight < 0.3 && wt === 'clear' ? '🌙' : wIcons[wt];
@@ -357,6 +421,9 @@
       else if (this.speed > 1) badges.push(`⏩ ${this.speed}×`);
       if (this.tempOffsetT > 0) badges.push(this.tempOffset > 0 ? '🔥 heat wave' : '🧊 ice age');
       if (!this.weather.auto) badges.push('weather locked');
+      if (this.cam.z > 1) badges.push(`🔍 ${this.cam.z}×`);
+      if (this.follow && !this.follow.dead) badges.push(`👁 following ${this.follow.sp.name}`);
+      for (const e of this.events.list) badges.push(DS.Events.DEFS[e.type][1] + ' ' + DS.Events.DEFS[e.type][0]);
       document.getElementById('hud-badges').innerHTML = badges.map((b) => `<span>${b}</span>`).join('');
       if (this.settings.showStats) {
         const counts = Object.entries(this.eco.count).sort((a, b) => b[1] - a[1]);
@@ -383,6 +450,7 @@
         switch (cmd.type) {
           case 'biome': this.loadBiome(cmd.id); break;
           case 'weather': this.setWeather(cmd.id); break;
+          case 'event': this.events.start(cmd.id); break;
           case 'time': this.setTime(cmd.value); break;
           case 'pause': this.setSpeed(this.speed === 0 ? 1 : 0); break;
           case 'toggle-ui': this.toggleUI(); break;

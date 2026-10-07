@@ -174,12 +174,12 @@
     }
 
     // Animated sky features: aurora, volcano plume
-    drawDynamic(ctx, t, daylight, frame) {
+    drawDynamic(ctx, t, daylight, frame, flare) {
       const W = this.world;
       const bg = this.biome.bg;
       const night = 1 - daylight;
-      if (bg.aurora && night > 0.4) {
-        const a = (night - 0.4) * 1.2;
+      if ((bg.aurora && night > 0.4) || flare) {
+        const a = flare ? 0.9 : (night - 0.4) * 1.2;
         const T = frame * 0.01;
         for (let x = 0; x < W.w; x++) {
           const y0 = W.h * 0.08 + Math.sin(x * 0.025 + T) * 6 + Math.sin(x * 0.07 + T * 0.7) * 3;

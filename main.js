@@ -130,7 +130,8 @@ function buildTray() {
     tray.setToolTip('Pixel Terrarium');
     tray.on('click', () => { if (win) { win.show(); if (cfg.clickThrough) setClickThrough(false); } });
   }
-  const weather = [['auto', 'Automatic'], ['clear', 'Clear'], ['cloudy', 'Cloudy'], ['rain', 'Rain'], ['storm', 'Thunderstorm'], ['snow', 'Snow'], ['sandstorm', 'Sandstorm'], ['ashfall', 'Ash fall'], ['fog', 'Fog']];
+  const weather = [['auto', 'Automatic'], ['clear', 'Clear'], ['cloudy', 'Cloudy'], ['rain', 'Rain'], ['storm', 'Thunderstorm'], ['drylightning', 'Dry lightning'], ['windy', 'Windy'], ['snow', 'Snow'], ['sandstorm', 'Sandstorm'], ['ashfall', 'Ash fall'], ['fog', 'Fog']];
+  const events = [['volcano', 'Volcano eruption'], ['abduction', 'Alien abduction'], ['tornado', 'Tornado'], ['blackhole', 'Black hole'], ['radiation', 'Radiation storm'], ['hurricane', 'Hurricane'], ['solarflare', 'Solar flare'], ['drought', 'Drought'], ['monsoon', 'Monsoon']];
   const menu = Menu.buildFromTemplate([
     { label: 'Play god  (Ctrl+Alt+G)', type: 'checkbox', checked: !cfg.clickThrough, click: (i) => setClickThrough(!i.checked) },
     { label: 'Show / hide controls', click: () => send({ type: 'toggle-ui' }) },
@@ -141,6 +142,7 @@ function buildTray() {
       submenu: biomes.length ? biomes.map((b) => ({ label: `${b.icon}  ${b.name}`, click: () => send({ type: 'biome', id: b.id }) })) : [{ label: '(loading)', enabled: false }],
     },
     { label: 'Weather', submenu: weather.map(([id, label]) => ({ label, click: () => send({ type: 'weather', id }) })) },
+    { label: 'Special event', submenu: events.map(([id, label]) => ({ label, click: () => send({ type: 'event', id }) })) },
     {
       label: 'Time',
       submenu: [['Sunrise', 0.25], ['Noon', 0.5], ['Sunset', 0.75], ['Midnight', 0]].map(([label, value]) => ({ label, click: () => send({ type: 'time', value }) })),

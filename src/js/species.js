@@ -248,10 +248,13 @@
   // Wasteland extras
   def('moth', { name: 'Moth', hab: 'air', art: [['w.w', 'wbw'], ['...', 'wbw']], pal: { w: '#c8b8a0', b: '#5a4a3a' }, speed: 0.4, flutter: true, metab: 0, perches: 0.2, max: 10, breed: 0, onlyNight: true, life: 5000, sleeps: false });
 
-  // Derived tables -----------------------------------------------------------
+  // Derived tables (run after every species file has loaded) -----------------
   const M = DS.M;
+  DS.finalizeSpecies = function () {
   for (const id in S) {
-    const sp = S[id];
+    const sp0 = S[id];
+    if (sp0.eatSet !== undefined) continue;
+    const sp = sp0;
     sp.w = Math.max(...sp.art[0].map((r) => r.length));
     sp.h = sp.art[0].length;
     sp.eatSet = sp.eats ? new Set(sp.eats.map((n) => M[n])) : null;
@@ -260,13 +263,15 @@
     sp.life *= 60;
     sp.mature *= 60;
     sp.metab = sp.metab / 60;
-    sp.fears = new Set();
     if (sp.reach == null) sp.reach = sp.h + 2;
   }
+  for (const id in S) S[id].fears = new Set();
   for (const id in S) {
     for (const p of S[id].prey || []) if (S[p]) S[p].fears.add(id);
     for (const p of S[id].chases || []) if (S[p]) S[p].fears.add(id);
   }
+  };
 
   DS.Species = S;
+  DS.SpeciesKit = { def, bird, fish, S };
 })();

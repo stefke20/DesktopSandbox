@@ -58,6 +58,12 @@ with your computer.
 | ☢️ | Ruined city | rats, cockroaches, crows, survivors, zombies that infect survivors, toxic sludge, burning barrels |
 | 🦖 | Prehistoric | brontosaurus, triceratops, raptors, T-rex, pterodactyls, giant dragonflies, an erupting volcano |
 | 🐜 | Inside an ant hill | a cross-section of a colony: the queen lays eggs, workers cut leaves and bring them home to grow a fungus garden, diggers carry soil up to build the mound; spiders, ladybugs, aphids and earthworms |
+| 🦒 | Savanna | lions, zebras, giraffes, elephants, rhinos, cheetahs, hyenas, wildebeest, meerkats, ostriches; acacias and baobabs around a waterhole |
+| 🐊 | Swamp | alligators, herons, egrets, frogs, toads, salamanders, fireflies, mosquitoes; cypress, mangrove, cattails, lily pads |
+| 🐠 | Coral reef | clownfish, angelfish, tangs, parrotfish, lionfish, pufferfish, seahorses, moray eels, rays, turtles among coral and anemones |
+| 🍁 | Autumn forest | maples, oaks and birches dropping leaves; deer, elk, boar, hedgehogs, badgers, turkeys, woodpeckers, toadstools |
+| 🐼 | Bamboo forest | giant and red pandas, a koi pond, cherry blossoms |
+| 🦣 | Ice age tundra | woolly mammoths, sabertooth cats, musk oxen, wolves, aurora |
 
 ## How the world works
 
@@ -75,24 +81,48 @@ with your computer.
   day; lights come on at night. The day can last 3 minutes to an hour, be
   frozen, or follow your real clock.
 - **Weather** changes on its own, depending on the biome: clear, cloudy, rain,
-  thunderstorms (lightning sets trees on fire and fuses sand into glass), snow,
-  sandstorms that move dunes, ash fall, and fog.
+  thunderstorms (lightning sets trees on fire and fuses sand into glass), dry
+  lightning (strikes with no rain to put the fires out), windy days that strip
+  leaves and blow snow and sand around, snow, sandstorms that move dunes, ash
+  fall, and fog.
+- **Biodiversity:** 276 species across mammals, birds, fish and sea life,
+  reptiles and amphibians, insects, prehistoric animals, and people and
+  machines. There are about 40 kinds of plant, including oak, birch, maple, cherry,
+  willow, baobab, acacia, bamboo, kelp, sunflowers, tall grass and berry bushes.
 
 ## Playing god
 
 Move the mouse to show the dock at the bottom of the screen. It hides itself
 again when you stop.
 
+**Zoom:** mouse wheel (or `+` / `-`, or the dock buttons) zooms up to 8×
+around the cursor. Drag empty space or use `WASD` / arrow keys to pan, and `0`
+resets. Double-click a creature with the hand to follow it around.
+
 - ✋ **Hand:** pick up a creature and throw it. Hover over a creature to see what it is doing.
 - 🖌️ **Paint:** 24 elements, including water, lava, fire, oil, toxic sludge, seeds, ice, glass, lava vents and eternal flames. Right-drag erases.
-- 🐾 **Life:** create any of 80+ creatures anywhere, even a T-rex in the suburbs.
+- 🐾 **Life:** create any of the 276 creatures anywhere, even a T-rex in the suburbs. Browse by category or search.
+- ⛰️ **Landscape:** raise, dig or flatten the ground (with soil, stone, sand, snow or mud), drop a mountain, lake or island with a click, and plant any of the ~40 plant types. Paint springs and drains to make rivers.
 - ⚡ **Powers:** lightning, meteor, explosion, earthquake, smite, bless (offspring), grow plants, scatter food, heat wave, ice age, found an ant colony.
+- 🌋 **Special events:**
+  - **Volcano eruption:** builds a cone, then throws lava bombs and ash.
+  - **Alien abduction:** a UFO beams creatures up, leaves a crop circle and sometimes drops off some aliens.
+  - **Tornado:** tears up soil, plants and animals along its path.
+  - **Black hole:** swallows terrain and creatures, then collapses in a flash.
+  - **Radiation storm:** mutant, glowing creatures.
+  - **Hurricane:** extreme wind, shredded trees and a storm surge.
+  - **Solar flare:** daytime aurora, heat, wildfires, and electronics stop working.
+  - **Drought:** water dries up, grass turns yellow, trees drop their leaves.
+  - **Monsoon:** downpours, floods and lush regrowth.
+
+  You place the volcano, abduction, tornado and black hole with a click; the others start straight away.
 - 🌦️ **Weather:** force any weather or set it back to automatic, and control the wind.
 - 🕑 **Time:** jump to sunrise, noon, sunset or midnight, scrub the clock, set the day length, pause, or run at 2× or 4× speed.
 - ⚙️ **Settings:** pixel size, frame rate, info overlays, idle biome cycling, desktop mode.
 
 **Keys:** `H` hide controls · `Space` pause · `B` / `Shift+B` next/previous biome ·
-`N` day/night · `R` rain · `I` population stats · `[` `]` brush size · `Esc` hand tool.
+`N` day/night · `R` rain · `I` population stats · `[` `]` or `Shift`+wheel brush size ·
+`+` `-` `0` zoom · `WASD` / arrows pan · `F` stop following · `Esc` hand tool.
 
 ## Project layout
 
@@ -104,15 +134,19 @@ src/js/materials.js     cell materials and their properties
 src/js/world.js         the cell grid: simulation + pixel rendering
 src/js/flora.js         plant structures (trees, cacti, coral, ...)
 src/js/species.js       creature pixel art and behaviour parameters
+src/js/species-more.js  sprite generators (quadrupeds, birds, fish) and most species
 src/js/creatures.js     creature AI and the ecosystem
 src/js/ants.js          ant colonies
 src/js/weather.js       clouds, precipitation, lightning
 src/js/background.js    sky, sun/moon/stars, parallax scenery, aurora
+src/js/terrain.js       landscaping tools (raise/lower/flatten, mountains, lakes)
+src/js/events.js        special events (volcano, tornado, black hole, ...)
 src/js/biomes.js        biome definitions and terrain generators
 src/js/god.js           god-mode tools and UI panels
 src/js/app.js           main loop, lighting, settings, desktop bridge
 ```
 
 To add a biome, add an entry to `src/js/biomes.js` with its sky, weather,
-plants, fauna and a `gen()` function. To add a creature, add a `def()` to
-`src/js/species.js` with some pixel art.
+plants, fauna and a `gen()` function. To add a creature, add a `D()` to
+`src/js/species-more.js`, either with hand-drawn pixel art or with the
+`quad()` / `bird()` / `gbird()` / `fish()` sprite generators.

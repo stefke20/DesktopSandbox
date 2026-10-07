@@ -218,6 +218,15 @@
             const c = eco.schoolCenter(this, 30);
             if (c) { this.tx = c[0] + U.rand(-8, 8); this.ty = c[1] + U.rand(-4, 4); return; }
           }
+          if (sp.deep || sp.bottom) {
+            for (let k = 0; k < 20; k++) {
+              const tx = U.clamp(Math.round(x + U.rand(-50, 50)), 2, W.w - 3);
+              const top = W.groundY(tx), bed = W.floorY(tx);
+              if (W.get(tx, top) !== M.WATER || bed - top < 4) continue;
+              const ty = sp.bottom ? bed - 1 - U.randInt(sp.h >> 1, sp.h) : Math.round(U.lerp(top, bed, U.rand(0.55, 0.92)));
+              if (W.get(tx, ty) === M.WATER) { this.tx = tx; this.ty = ty; return; }
+            }
+          }
           for (let k = 0; k < 20; k++) {
             const tx = Math.round(x + U.rand(-50, 50)), ty = Math.round(this.cy + U.rand(-18, 18));
             if (W.get(tx, ty) === M.WATER && W.get(tx, ty - 1) === M.WATER) { this.tx = tx; this.ty = ty; return; }
@@ -430,6 +439,7 @@
 
     moveVehicle(eco) {
       const W = eco.world, sp = this.sp;
+      if (eco.flare) return; // electronics are fried
       this.x += this.dir * sp.speed;
       if (this.x < -7) this.x = W.w + 6;
       else if (this.x > W.w + 7) this.x = -6;
@@ -602,7 +612,7 @@
         if (W.isSolid(fx, fy) || W.isLiquid(fx, fy)) this.y -= 1;
         return;
       }
-      this.x = nx;
+      this.x = nx + (W.wind || 0) * (sp.flutter ? 0.1 : sp.w > 8 ? 0.02 : 0.04);
       this.y = ny;
       if (this.y < 2) { this.y = 2; this.vy = Math.abs(this.vy); }
       if (this.x < 1) { this.x = 1; this.vx = Math.abs(this.vx); }
@@ -983,6 +993,7 @@
           ctx.fillStyle = MP.colorsHex[c.carry][1] || MP.colorsHex[c.carry][0];
           ctx.fillRect(Math.round(c.x) + (c.dir > 0 ? 1 : -1), dy - 1, 2, 1);
         }
+        if (c.mutant && lights.length < 900 && (c.anim >> 3) % 2) lights.push(Math.round(c.x), Math.round(c.cy), 3);
         if (sp.glow && darkness > 0.25 && lights.length < 900) {
           if (sp.hab === 'vehicle') lights.push(dx + (c.dir > 0 ? e.w + 3 : -4), Math.round(c.y) - 2, 6);
           else if ((c.anim >> 4) % 3 !== 0) lights.push(Math.round(c.x), Math.round(c.cy), sp.id === 'jellyfish' ? 7 : 8);

@@ -96,3 +96,18 @@ kbd { background: rgba(255,255,255,0.1); border-radius: 4px; padding: 0 4px; fon
 #stats b { color: var(--accent); font-weight: 600; }
 #stats .n { float: right; margin-left: 12px; color: var(--muted); }
 body.idle #stats { opacity: 0.6; }
+
+#toast {
+  position: absolute; left: 50%; top: 18%; transform: translate(-50%, -10px); pointer-events: none;
+  padding: 10px 18px; border-radius: 12px; background: rgba(0, 0, 0, 0.6); font-size: 20px; font-weight: 600;
+  opacity: 0; transition: opacity 0.4s, transform 0.4s; text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+}
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.tabs .chip { padding: 3px 8px; font-size: 12px; }
+#panel input[type=search] {
+  background: var(--btn); color: var(--text); border: 1px solid var(--panel-border); border-radius: 7px;
+  padding: 4px 8px; font: inherit; outline: none; width: 180px;
+}
+.zoom-btn { width: 28px; font-size: 16px; }
+#zoom-label { color: var(--muted); font-size: 11px; min-width: 22px; text-align: center; }
