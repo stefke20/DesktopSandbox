@@ -9,6 +9,8 @@ dusk and it rains, snows or storms on its own. Or take over and **play god**.
 
 ## Running it
 
+**New to this?** Follow the step-by-step [installation guide](INSTALL.md).
+
 ```bash
 npm install
 npm start          # desktop app (Electron)
