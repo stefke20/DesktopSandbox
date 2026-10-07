@@ -732,13 +732,13 @@
           const s = Brain.findCell(W, m.x, R, (t) => ROCK.has(t) && t !== M.MASONRY, true);
           if (s) return Brain.to(c, s[0], s[1]);
           // dig down near the town
-          { const x = Brain.digSite(col, W); return Brain.to(c, x, W.floorY(x) + U.randInt(6, 14)); }
+          { const r = Brain.rockBelow(col, W); return Brain.to(c, r[0], r[1]); }
         }
         case 'mine': {
           const target = Brain.pickOre(col, eco);
           if (target) return Brain.to(c, target[0], target[1]);
           c.job = 'quarry';
-          { const x = Brain.digSite(col, W); return Brain.to(c, x, W.floorY(x) + U.randInt(8, 20)); }
+          { const r = Brain.rockBelow(col, W); return Brain.to(c, r[0], r[1]); }
         }
         case 'build': {
           const site = col.buildings.find((b) => !b.done);
@@ -815,6 +815,19 @@
     toSurf(c, W, x) { x = U.clamp(Math.round(x), 2, W.w - 3); return Brain.to(c, x, Brain.gy(W, x) - 1); },
 
     // somewhere to dig down outside the built-up core (never through roads and floors)
+    // the nearest workable rock below the town's shaft (a little to either side)
+    rockBelow(col, W) {
+      const sx = Brain.digSite(col, W);
+      for (let k = 0; k < 24; k++) {
+        const x = sx + (k === 0 ? 0 : U.randInt(-8, 8));
+        for (let y = W.floorY(x); y < Math.min(W.h - 2, W.floorY(x) + 60); y++) {
+          const t = W.get(x, y);
+          if ((ROCK.has(t) && t !== M.MASONRY) || (ORE_SET.has(t) && Object.values(ORES).some((o) => o[0] === t && col.has(o[1])))) return [x, y];
+        }
+      }
+      return [sx, W.floorY(sx) + 12];
+    },
+
     // everyone digs down the same quarry shaft (or the mine's), so the land isn't riddled with holes
     digSite(col, W) {
       const mine = col.buildings.find((b) => b.type === 'mine' && b.done);
