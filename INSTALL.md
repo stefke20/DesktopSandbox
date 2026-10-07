@@ -15,11 +15,10 @@
 
 That's it. To uninstall: **Settings → Apps → Pixel Terrarium → Uninstall**.
 
-**For whoever looks after the project:** to make a new `.exe`, go to the
-**Actions** tab, choose **Build installers**, and click **Run workflow**. To
-publish it on the Releases page, push a version tag:
-`git tag v0.1.0 && git push origin v0.1.0`. This also builds the Mac `.dmg`
-and the Linux `.AppImage`.
+**For whoever looks after the project:** every push to the main branch
+rebuilds the installers (`.exe`, Mac `.dmg`, Linux `.AppImage`) on GitHub and
+publishes them as the release named after the `version` in `package.json`.
+To publish a new version, raise that number (for example to `0.2.0`) and push.
 
 ---
 
