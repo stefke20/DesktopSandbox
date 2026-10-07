@@ -6,9 +6,12 @@
 
   const DEFAULTS = {
     biome: 'grasslands', scale: 4, dayMinutes: 12, autoCycle: 0, showStats: false, showHud: true,
-    idleDelay: 5, fps: 60, stripHeight: 0.3,
+    idleDelay: 5, fps: 60, stripHeight: 0.3, edgePan: true,
   };
   const KEY = 'pixel-terrarium.settings';
+  // how much bigger the world is than the screen (the rest is reached by panning)
+  const WORLD_X = 1.7, WORLD_Y = 1.3;
+  const EDGE = 36; // px from the window edge that starts edge panning
 
   // light types: radius, colour, how much darkness they cut (m) and colour glow strength (g)
   const LIGHTS = {
@@ -106,8 +109,10 @@
       document.getElementById('biome').value = biome.id;
       const scale = this.settings.scale;
       this.scale = scale;
-      const w = Math.max(80, Math.ceil(window.innerWidth / scale));
-      const h = Math.max(50, Math.ceil(window.innerHeight / scale));
+      // the world is bigger than the screen: the camera scrolls over it
+      this.screenW = Math.max(80, Math.ceil(window.innerWidth / scale));
+      this.screenH = Math.max(50, Math.ceil(window.innerHeight / scale));
+      const w = Math.ceil(this.screenW * WORLD_X), h = Math.ceil(this.screenH * WORLD_Y);
       const W = new DS.World(w, h);
       W.baseTemp = biome.temp;
       W.temp = biome.temp;
@@ -120,8 +125,12 @@
       W.waterSeeds = biome.waterSeeds || [['seaweed', 3], ['coral', 1]];
       W.ventRate = biome.ventRate || 0.002;
       W.shadeDepth = !biome.noShade;
+      W.current = biome.current || 0;
       const fx = new DS.FX(W);
+      W.fx = fx;
       const eco = new DS.Ecosystem(W, fx);
+      eco.scale = U.clamp(w / 320, 0.6, 3);
+      eco.cap = Math.round(450 * Math.min(eco.scale, 2.2));
       const weather = new DS.Weather(W, eco, fx);
       eco.weather = weather;
       this.world = W;
@@ -144,16 +153,21 @@
       this.scene.height = this.cells.height = this.light.height = h;
       this.img = this.cctx.createImageData(w, h);
       this.buf = new Uint32Array(this.img.data.buffer);
-      this.canvas.width = w * scale;
-      this.canvas.height = h * scale;
-      this.canvas.style.width = w * scale + 'px';
-      this.canvas.style.height = h * scale + 'px';
-      this.ctx.imageSmoothingEnabled = false;
+      this.sizeCanvas();
       this.cycleT = 0;
       this.follow = null;
       this.cam = { z: this.cam ? this.cam.z : 1, x: w / 2, y: h / 2 };
       this.clampCam();
       if (this.god) { this.god.refresh(); this.updateHud(); }
+    },
+
+    sizeCanvas() {
+      const s = this.scale;
+      this.canvas.width = this.screenW * s;
+      this.canvas.height = this.screenH * s;
+      this.canvas.style.width = this.screenW * s + 'px';
+      this.canvas.style.height = this.screenH * s + 'px';
+      this.ctx.imageSmoothingEnabled = false;
     },
 
     nextBiome(d) {
@@ -163,8 +177,14 @@
     },
 
     onResize() {
-      const w = Math.ceil(window.innerWidth / this.scale), h = Math.ceil(window.innerHeight / this.scale);
-      if (Math.abs(w - this.world.w) > 2 || Math.abs(h - this.world.h) > 2) this.loadBiome(this.biome.id);
+      const sw = Math.ceil(window.innerWidth / this.scale), sh = Math.ceil(window.innerHeight / this.scale);
+      if (sw === this.screenW && sh === this.screenH) return;
+      // only rebuild the world if the new screen no longer fits comfortably inside it
+      if (sw * 1.1 > this.world.w || sh > this.world.h || sw < this.world.w / (WORLD_X * 1.6)) { this.loadBiome(this.biome.id); return; }
+      this.screenW = sw;
+      this.screenH = sh;
+      this.sizeCanvas();
+      this.clampCam();
     },
 
     setSpeed(v) { this.speed = v; },
@@ -256,6 +276,7 @@
       eco.flare = this.flare;
       this.weather.update(this.daylight);
       this.events.update();
+      if (this.biome.marineSnow && Math.random() < 0.6) this.fx.add(U.rand(0, W.w), U.rand(W.h * 0.15, W.h * 0.3), U.rand(-0.05, 0.05), U.rand(0.05, 0.12), 'rgba(220,230,240,0.7)', 900, 0);
       W.step();
       eco.update();
       this.fx.update();
@@ -281,6 +302,7 @@
       } else {
         this.god.update();
       }
+      this.edgePan();
       this.render();
       // idle handling
       const idleDelay = this.settings.idleDelay;
@@ -302,14 +324,15 @@
       let dark = U.clamp((1 - daylight) * 0.6 + storm, 0, 0.72);
       dark *= 1 - Math.min(1, this.weather.flash);
       sctx.globalCompositeOperation = 'source-over';
-      sctx.drawImage(this.bg.render(this.time, daylight, this.weather), 0, 0);
+      sctx.drawImage(this.bg.render(this.time, daylight, this.weather, this.view()), 0, 0);
       this.bg.drawDynamic(sctx, this.time, daylight, this.frame, this.flare);
       this.weather.drawClouds(sctx, daylight, this.bg.skyBottom || [200, 220, 240]);
       W.render(this.buf, this.flare ? 0 : dark);
       this.cctx.putImageData(this.img, 0, 0);
       sctx.drawImage(this.cells, 0, 0);
       const lights = W.lights;
-      this.eco.draw(sctx, lights, dark);
+      const abyss = this.biome.abyss;
+      this.eco.draw(sctx, lights, abyss ? 1 : dark);
       for (const l of this.events.pendingLights || []) lights.push(l);
       this.events.pendingLights = [];
       this.events.drawWorld(sctx);
@@ -322,12 +345,23 @@
       this.weather.drawFront(sctx, daylight);
       this.events.drawOverlay(sctx);
 
-      if (dark > 0.03) {
+      if (dark > 0.03 || abyss) {
         const L = this.lctx;
         L.globalCompositeOperation = 'source-over';
         L.clearRect(0, 0, W.w, W.h);
         L.fillStyle = `rgba(8,12,38,${dark})`;
         L.fillRect(0, 0, W.w, W.h);
+        if (abyss) {
+          // sunlight fades away with depth
+          const y0 = W.h * abyss;
+          const g = L.createLinearGradient(0, y0, 0, W.h);
+          g.addColorStop(0, 'rgba(2,6,20,0)');
+          g.addColorStop(0.5, 'rgba(2,6,20,0.75)');
+          g.addColorStop(1, 'rgba(1,2,8,0.95)');
+          L.fillStyle = g;
+          L.fillRect(0, y0, W.w, W.h - y0);
+          dark = Math.max(dark, 0.6);
+        }
         L.globalCompositeOperation = 'destination-out';
         for (let i = 0; i < lights.length; i += 3) {
           const k = lights[i + 2], r = LIGHTS[k].r;
@@ -362,17 +396,50 @@
       if (ox || oy) ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
       ctx.drawImage(this.scene, v.x, v.y, v.w, v.h, ox, oy, v.w * v.s, v.h * v.s);
       this.god.drawOverlay(ctx, v);
+      this.drawMinimap(ctx);
     },
 
     // ------------------------------------------------------------ camera
+    edgePan() {
+      const m = this.mouse;
+      if (!m || !this.settings.edgePan || m.overUI || this.god.held || document.body.classList.contains('watch-only')) return;
+      const W = window.innerWidth, H = window.innerHeight;
+      let dx = 0, dy = 0;
+      if (m.x < EDGE) dx = -(1 - m.x / EDGE);
+      else if (m.x > W - EDGE) dx = 1 - (W - m.x) / EDGE;
+      if (m.y < EDGE) dy = -(1 - m.y / EDGE);
+      else if (m.y > H - EDGE) dy = 1 - (H - m.y) / EDGE;
+      if (!dx && !dy) return;
+      const sp = 2.6 / this.cam.z;
+      const before = this.cam.x + ',' + this.cam.y;
+      this.panBy(dx * sp, dy * sp * 0.7);
+      if (before === this.cam.x + ',' + this.cam.y) this.camT = Math.max(this.camT || 0, 40);
+    },
+    drawMinimap(ctx) {
+      if (!(this.camT > 0)) return;
+      this.camT--;
+      const W = this.world, v = this.view();
+      const mw = 130, mh = Math.round((mw * W.h) / W.w);
+      const x0 = 10, y0 = this.canvas.height - mh - 12;
+      const a = Math.min(1, this.camT / 30);
+      ctx.save();
+      ctx.globalAlpha = a;
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(x0 - 2, y0 - 2, mw + 4, mh + 4);
+      ctx.drawImage(this.scene, x0, y0, mw, mh);
+      ctx.strokeStyle = '#ffcf4a';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(x0 + (v.x / W.w) * mw, y0 + (v.y / W.h) * mh, (v.w / W.w) * mw, (v.h / W.h) * mh);
+      ctx.restore();
+    },
     view() {
       const W = this.world, z = this.cam.z;
-      const w = W.w / z, h = W.h / z;
+      const w = this.screenW / z, h = this.screenH / z;
       return { x: U.clamp(Math.round(this.cam.x - w / 2), 0, Math.max(0, Math.floor(W.w - w))), y: U.clamp(Math.round(this.cam.y - h / 2), 0, Math.max(0, Math.floor(W.h - h))), w, h, s: this.scale * z, z };
     },
     clampCam() {
       const W = this.world, z = this.cam.z;
-      const hw = W.w / z / 2, hh = W.h / z / 2;
+      const hw = Math.min(W.w / 2, this.screenW / z / 2), hh = Math.min(W.h / 2, this.screenH / z / 2);
       this.cam.x = U.clamp(this.cam.x, hw, W.w - hw);
       this.cam.y = U.clamp(this.cam.y, hh, W.h - hh);
     },
@@ -388,13 +455,14 @@
       const wx = v.x + sx / v.s, wy = v.y + sy / v.s;
       this.cam.z = z;
       const s = this.scale * z;
-      this.cam.x = wx - sx / s + this.world.w / z / 2;
-      this.cam.y = wy - sy / s + this.world.h / z / 2;
+      this.cam.x = wx - sx / s + this.screenW / z / 2;
+      this.cam.y = wy - sy / s + this.screenH / z / 2;
       this.clampCam();
       this.updateHud();
     },
-    panBy(dx, dy) {
-      this.follow = null;
+    panBy(dx, dy, keepFollow) {
+      if (!keepFollow) this.follow = null;
+      this.camT = 120;
       this.cam.x += dx;
       this.cam.y += dy;
       this.clampCam();

@@ -55,6 +55,7 @@
     die(eco, cause, quiet) {
       if (this.dead) return;
       this.dead = true;
+      if (this.sp.rebirth || this.sp.splits) DS.Magic.onDeath(this, eco, cause);
       if (quiet) return;
       const fx = eco.fx;
       const cx = this.x, cy = this.cy;
@@ -87,6 +88,7 @@
       if (--this.thinkT <= 0) {
         this.thinkT = 10 + ((Math.random() * 14) | 0);
         if (sp.ant) DS.Ants.decide(this, eco);
+        else if (sp.hive) DS.Hive.decide(this, eco);
         else this.decide(eco);
       }
       this.goalT++;
@@ -123,6 +125,10 @@
         case 'climb': case 'burrow': this.moveClimb(eco, mul); break;
       }
       this.moving = Math.abs(this.x - px) + Math.abs(this.y - py) > 0.01;
+      if (this.dead) return;
+
+      if (sp.hive) DS.Hive.after(this, eco);
+      if (sp.magic) DS.Magic.tick(this, eco);
       if (this.dead) return;
 
       // interactions
@@ -479,6 +485,10 @@
       while (sy > 0 && W.isLiquid(fx, sy - 1)) sy--;
       this.y = sy;
       this.inWater = true;
+      if (W.current) {
+        const nx = this.x + W.current * 0.15;
+        if (W.isLiquid(Math.round(nx), sy)) this.x = nx < 1 ? W.w - 2 : nx > W.w - 2 ? 1 : nx;
+      }
       if (mul === 0) return;
       const dx = this.tx - this.x;
       if (Math.abs(dx) < 1) { this.arrived = true; return; }
@@ -559,7 +569,7 @@
         return;
       }
       if (!W.isLiquid(Math.round(nx), ncy)) { this.vy = Math.abs(this.vy) * 0.3; return; }
-      this.x = nx;
+      this.x = U.clamp(nx + (W.current || 0) * 0.12, 1, W.w - 2);
       this.y = ny;
       if (Math.abs(this.vx) > 0.03) this.dir = Math.sign(this.vx);
     }
@@ -606,7 +616,7 @@
       const nx = this.x + this.vx, ny = this.y + this.vy;
       const t = W.get(Math.round(nx), Math.round(ny));
       const liquid = MP.kind[t] === DS.KIND.liquid;
-      if (MP.solid[t] || (liquid && !(sp.dives && this.goal === 'hunt'))) {
+      if (!sp.phase && (MP.solid[t] || (liquid && !(sp.dives && this.goal === 'hunt')))) {
         this.vy = -Math.abs(this.vy) - 0.25;
         this.vx *= 0.7;
         if (W.isSolid(fx, fy) || W.isLiquid(fx, fy)) this.y -= 1;
@@ -618,7 +628,7 @@
       if (this.x < 1) { this.x = 1; this.vx = Math.abs(this.vx); }
       if (this.x > W.w - 2) { this.x = W.w - 2; this.vx = -Math.abs(this.vx); }
       if (Math.abs(this.vx) > 0.05) this.dir = Math.sign(this.vx);
-      if (liquid) {
+      if (liquid && !sp.phase) {
         if (++this.drown > 400) this.die(eco, 'drown');
       } else this.drown = 0;
     }
@@ -727,7 +737,11 @@
       const sp = S[id];
       if (!sp) return null;
       if (sp.queen && !opts.colony) {
-        const col = DS.Ants.found(this, Math.round(x), Math.round(y));
+        if (sp.hive) {
+          const h = DS.Hive.found(this, Math.round(x), Math.round(y));
+          return h ? h.queen : null;
+        }
+        const col = DS.Ants.found(this, Math.round(x), Math.round(y), { queen: id, worker: sp.worker });
         return col ? col.queen : null;
       }
       const c = new Creature(sp, x, y, opts);
@@ -794,9 +808,10 @@
     populate(fauna) {
       this.natives = fauna;
       for (const [id, n] of fauna) {
-        if (S[id].ant) continue;
+        if (S[id].ant || S[id].hive) continue;
         if (S[id].onlyNight && this.daylight > 0.4) continue;
-        for (let i = 0; i < n; i++) {
+        const count = Math.max(1, Math.round(n * (this.scale || 1)));
+        for (let i = 0; i < count; i++) {
           const p = this.place(id);
           if (p) this.spawn(id, p[0], p[1]);
         }
@@ -871,7 +886,7 @@
 
     canBreed(sp) {
       const n = this.count[sp.id] || 0;
-      return n >= 2 && n < sp.max && this.list.length < this.cap;
+      return n >= 2 && n < sp.max * (this.scale || 1) && this.list.length < this.cap;
     }
 
     birth(parent) {
@@ -887,9 +902,9 @@
     }
 
     kill(prey, pred) {
-      if (pred && pred.sp.infects && (prey.sp.id === 'person' || prey.sp.id === 'survivor')) {
+      if (pred && pred.sp.infects && prey.sp.humanoid) {
         prey.die(this, 'infect');
-        const z = this.spawn('zombie', prey.x, prey.y, { newborn: true });
+        const z = this.spawn(pred.sp.infects === true ? 'zombie' : pred.sp.infects, prey.x, prey.y, { newborn: true });
         if (z) z.age = 0;
         return;
       }
@@ -937,6 +952,7 @@
         col.update(this);
         if (col.dead) this.colonies.splice(i, 1);
       }
+      if (this.hives) for (let i = this.hives.length - 1; i >= 0; i--) { this.hives[i].update(this); if (this.hives[i].dead) this.hives.splice(i, 1); }
       if (++this.immT >= 240) { this.immT = 0; this.immigrate(); }
     }
 
@@ -948,21 +964,21 @@
         const sp = S[id];
         const have = this.count[id] || 0;
         if (sp.ant) {
-          if (sp.queen && !this.colonies.length && Math.random() < 0.15) {
+          if (sp.queen && !sp.hive && !this.colonies.some((c) => c.queenId === id) && Math.random() < 0.15) {
             const x = U.randInt(10, this.world.w - 10);
-            const col = DS.Ants.found(this, x, this.world.groundY(x) - 1);
+            const col = DS.Ants.found(this, x, this.world.groundY(x) - 1, { queen: id, worker: sp.worker });
             if (col) this.fx.glyph(x, col.queen.y - 6, 'heart', '#ffd040');
           }
           continue;
         }
         if (sp.onlyNight) {
-          if (night && have < n && Math.random() < 0.5) {
+          if (night && have < n * (this.scale || 1) && Math.random() < 0.5) {
             const p = this.place(id);
             if (p) this.spawn(id, p[0], p[1]);
           }
           continue;
         }
-        const want = Math.max(1, Math.ceil(n * 0.5));
+        const want = Math.max(1, Math.ceil(n * 0.5 * (this.scale || 1)));
         if (have < want && Math.random() < 0.35) {
           const p = this.place(id, sp.hab === 'ground' || sp.hab === 'roller' || sp.hab === 'air');
           if (p) {
@@ -987,6 +1003,7 @@
         const img = c.dir < 0 && !sp.noFlip ? e.frames[f].l : e.frames[f].r;
         const dx = Math.round(c.x - e.w / 2), dy = Math.round(c.y - e.h + 1);
         if (sp.hab === 'water' && c.inWater) ctx.globalAlpha = 0.9;
+        if (sp.alpha) ctx.globalAlpha = sp.alpha * (0.85 + 0.15 * Math.sin(c.anim * 0.05));
         ctx.drawImage(img, dx, dy);
         ctx.globalAlpha = 1;
         if (c.carry) {

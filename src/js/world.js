@@ -8,7 +8,7 @@
 
   // Static materials that need occasional updates
   const ACTIVE_STATIC = new Uint8Array(M.COUNT);
-  [M.GRASS, M.DRYGRASS, M.WOOD, M.BIRCH, M.BAMBOO, M.LEAF, M.AUTUMN, M.BLOSSOM, M.ICE, M.EMBERS, M.VENT, M.SPRING, M.DRAIN, M.PLANT, M.TALLGRASS, M.FLOWER].forEach((t) => (ACTIVE_STATIC[t] = 1));
+  [M.HVENT, M.GRASS, M.DRYGRASS, M.WOOD, M.BIRCH, M.BAMBOO, M.LEAF, M.AUTUMN, M.BLOSSOM, M.ICE, M.EMBERS, M.VENT, M.SPRING, M.DRAIN, M.PLANT, M.TALLGRASS, M.FLOWER].forEach((t) => (ACTIVE_STATIC[t] = 1));
 
   // Darker palette variants for cells deep below the surface
   const DEPTH_LEVELS = 8;
@@ -88,6 +88,8 @@
       this.ventRate = 0.002;
       this.lapse = 0;
       this.drought = 0;
+      this.current = 0;
+      this.fx = null;
       this.backY = null;
       this.setWater('#4a90d9', '#0c2a5a');
     }
@@ -283,6 +285,8 @@
       if (t === M.LAVA) {
         if (this.lavaReact(i, x, y)) return;
         if (Math.random() < 0.6) return; // viscous
+      } else if (t === M.HONEY) {
+        if (Math.random() < 0.85) return;
       } else if (t === M.WATER) {
         const above = y > 0 ? cells[i - w] : 0;
         if (above === 0) {
@@ -305,6 +309,12 @@
           if (MP.veg[nt]) this.set(x + dx, y + dy, Math.random() < 0.5 ? M.EMPTY : M.SMOKE);
         }
       }
+      // fast path: a liquid cell boxed in below and on both sides cannot move
+      if (y < h - 1 && x > 0 && x < w - 1) {
+        const b = cells[i + w], l = cells[i - 1], r = cells[i + 1];
+        if (b && l && r && K[b] !== KG && K[l] !== KG && K[r] !== KG && K[b] !== KF && K[l] !== KF && K[r] !== KF &&
+            !this.lighter(t, b) && !this.lighter(t, l) && !this.lighter(t, r)) return;
+      }
       if (y < h - 1) {
         const b = i + w;
         if (this.lighter(t, cells[b])) { this.swap(i, b); return; }
@@ -320,10 +330,18 @@
       const spread = MP.spread[t];
       let dir = Math.random() < 0.5 ? -1 : 1;
       if (this.wind && Math.random() < Math.abs(this.wind) * 0.2) dir = Math.sign(this.wind);
+      if (this.current && t === M.WATER && Math.random() < 0.8) dir = Math.sign(this.current);
       let last = 0;
       for (let s = 1; s <= spread; s++) {
         const nx = x + dir * s;
-        if (nx < 0 || nx >= w) break;
+        if (nx < 0 || nx >= w) {
+          // a river flows off one edge and back in at the other
+          if (this.current && t === M.WATER && last === s - 1) {
+            const j = y * w + (nx < 0 ? w - 1 : 0);
+            if (cells[j] === 0) { this.swap(i, j); return; }
+          }
+          break;
+        }
         const nt = cells[i + dir * s];
         if (nt === 0 || K[nt] === KG) last = s;
         else break;
@@ -440,6 +458,9 @@
         case M.PLANT: case M.TALLGRASS: case M.FLOWER:
           if (this.drought > 0 && r < 0.0006) this.set(x, y, t === M.FLOWER ? M.EMPTY : M.LITTER, 0, 1);
           return;
+        case M.HVENT:
+          if (r < 0.12 && this.fx && K[this.get(x, y - 1)] === KL) this.fx.add(x + Math.random() - 0.5, y - 1, (Math.random() - 0.5) * 0.1, -0.25, Math.random() < 0.5 ? '#bcd8f0' : '#8aa8c8', 160, -0.002);
+          return;
         case M.SPRING:
           if (r < 0.35) {
             const [dx, dy] = N8[(Math.random() * 8) | 0];
@@ -539,7 +560,7 @@
             if (((x * 7 + y * 13 + fr) & 7) === 0 && lights.length < 600) lights.push(x, y, 1);
             continue;
           }
-          if (t === M.LAVA || t === M.EMBERS || t === M.TOXIC || t === M.VENT) {
+          if (t === M.LAVA || t === M.EMBERS || t === M.TOXIC || t === M.VENT || t === M.HVENT) {
             buf[i] = PAL[t * 4 + shade[i]];
             if (((x * 5 + y * 11) % 9) === 0 && lights.length < 600) lights.push(x, y, t === M.TOXIC ? 3 : 2);
             continue;

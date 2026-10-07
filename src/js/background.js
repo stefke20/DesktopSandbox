@@ -79,9 +79,9 @@
       return { top: pick(0), bottom: pick(1), sunH };
     }
 
-    render(t, daylight, weather) {
+    render(t, daylight, weather, view) {
       const cover = weather ? weather.cloudCover : 0;
-      const key = Math.round(t * 720) + '|' + Math.round(cover * 10);
+      const key = Math.round(t * 720) + '|' + Math.round(cover * 10) + '|' + (view ? Math.round(view.x / 3) + ',' + Math.round(view.y / 3) + ',' + Math.round(view.w) : '');
       if (key === this.key) return this.canvas;
       this.key = key;
       const ctx = this.ctx, W = this.world, w = W.w, h = W.h;
@@ -105,12 +105,14 @@
         }
       }
       // sun & moon
-      const horizon = h * 0.6;
+      // the sun and moon arc across whatever part of the world is in view
+      const vx = view ? view.x : 0, vw = view ? view.w : w, vy = view ? view.y : 0, vh = view ? view.h : h;
+      const horizon = vy + vh * 0.6;
       const body = (tt, r, col, glow) => {
         const p = (tt - 0.2) / 0.6;
         if (p < 0 || p > 1) return;
-        const x = w * (0.05 + 0.9 * p);
-        const y = horizon - Math.sin(Math.PI * p) * horizon * 0.85;
+        const x = vx + vw * (0.05 + 0.9 * p);
+        const y = horizon - Math.sin(Math.PI * p) * vh * 0.6 * 0.85;
         if (glow) {
           const gg = ctx.createRadialGradient(x, y, 0, x, y, r * 4);
           gg.addColorStop(0, glow);
@@ -159,6 +161,14 @@
         }
       }
 
+      // backdrops of hollow things (hive interiors...)
+      for (const sh of W.backShapes || []) {
+        ctx.fillStyle = sh.color;
+        for (let dy = -sh.ry; dy <= sh.ry; dy++) {
+          const hw = Math.floor(sh.rx * Math.sqrt(Math.max(0, 1 - (dy * dy) / (sh.ry * sh.ry))));
+          ctx.fillRect(sh.cx - hw, sh.cy + dy, hw * 2 + 1, 1);
+        }
+      }
       // underground backdrop (cross-section biomes)
       if (W.backY) {
         const ub = U.hex(this.biome.bg.under || '#3a2618');

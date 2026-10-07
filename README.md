@@ -64,6 +64,15 @@ with your computer.
 | 🍁 | Autumn forest | maples, oaks and birches dropping leaves; deer, elk, boar, hedgehogs, badgers, turkeys, woodpeckers, toadstools |
 | 🐼 | Bamboo forest | giant and red pandas, a koi pond, cherry blossoms |
 | 🦣 | Ice age tundra | woolly mammoths, sabertooth cats, musk oxen, wolves, aurora |
+| 🪷 | Garden pond | koi, goldfish, tadpoles, frogs, newts, water striders, lily pads |
+| 🏞️ | River & waterfall | a waterfall pouring off a cliff into a flowing river; salmon leap, otters, beavers, grizzlies |
+| 🦑 | Deep sea | sunlight fades into the abyss, where glowing anglerfish, lanternfish and vampire squid live; hydrothermal vents, tube worms, giant squid, sperm whales, marine snow |
+| 🐝 | Inside a beehive | a cross-section of a hive hanging from an oak: workers fly out to flowers and fill the comb with honey, and the queen lays brood that hatches into new bees |
+| 🌱 | Backyard lawn | a bug's-eye view (think *Grounded*): grass blades like trees, giant dandelions and clover, a soda can, and huge ants, spiders, ladybugs, weevils and mantises |
+| 🦩 | Wetlands | cranes, spoonbills, ibises, coots, geese, muskrats among reeds and pools |
+| 🪨 | Mesa canyons | red-rock plateaus with striped cliffs; cougars, bighorn sheep, javelinas, Gila monsters |
+| 🌴 | Oasis | a palm-ringed lake in the dunes with camels, gazelles, flamingos |
+| 🧚 | Enchanted forest | fairies, pixies, unicorns, elves, gnomes, an ent, a kitsune, giant toadstools |
 
 ## How the world works
 
@@ -85,9 +94,9 @@ with your computer.
   lightning (strikes with no rain to put the fires out), windy days that strip
   leaves and blow snow and sand around, snow, sandstorms that move dunes, ash
   fall, and fog.
-- **Biodiversity:** 276 species across mammals, birds, fish and sea life,
-  reptiles and amphibians, insects, prehistoric animals, and people and
-  machines. There are about 40 kinds of plant, including oak, birch, maple, cherry,
+- **Biodiversity:** 375 species across mammals, birds, fish and sea life,
+  reptiles and amphibians, insects, prehistoric animals, people and machines,
+  and fantasy & mythology. There are about 40 kinds of plant, including oak, birch, maple, cherry,
   willow, baobab, acacia, bamboo, kelp, sunflowers, tall grass and berry bushes.
 
 ## Playing god
@@ -95,13 +104,27 @@ with your computer.
 Move the mouse to show the dock at the bottom of the screen. It hides itself
 again when you stop.
 
+**Looking around:** the world is bigger than your screen. Move the mouse
+to any screen edge to scroll in that direction; there is extra room mostly
+to the left and right, and a little above and below. A minimap shows where
+you are. Edge scrolling can be turned off in ⚙️ Settings.
+
 **Zoom:** mouse wheel (or `+` / `-`, or the dock buttons) zooms up to 8×
 around the cursor. Drag empty space or use `WASD` / arrow keys to pan, and `0`
 resets. Double-click a creature with the hand to follow it around.
 
 - ✋ **Hand:** pick up a creature and throw it. Hover over a creature to see what it is doing.
 - 🖌️ **Paint:** 24 elements, including water, lava, fire, oil, toxic sludge, seeds, ice, glass, lava vents and eternal flames. Right-drag erases.
-- 🐾 **Life:** create any of the 276 creatures anywhere, even a T-rex in the suburbs. Browse by category or search.
+- 🐾 **Life:** create any of the 375 creatures anywhere, even a T-rex in the suburbs. Browse by category or search.
+- 🐉 **Fantasy & myth** (a category in the Life panel): 54 creatures, many with special abilities:
+  - **Dragons** breathe fire, **wyverns** spit poison, and the **phoenix** is reborn from its ashes.
+  - **Medusa** and the **basilisk** turn creatures into stone statues, and **trolls** turn to stone in sunlight.
+  - **Vampires** burn in daylight and turn their victims. **Ghosts** drift through walls at night.
+  - **Zeus** and the **Thunderbird** call down lightning, and **Poseidon** raises the water.
+  - The **witch** turns animals into frogs, **wizards** cast random spells, **Cupid** makes animals fall in love, and the **siren** lures creatures.
+  - **Fairies** and **unicorns** leave flowers (unicorns also a rainbow trail), and **ents** plant trees.
+  - **Dwarves** dig mines, the **kraken** sinks boats, cutting a **hydra** or **slime** makes two, and **knights** hunt monsters.
+  - Also robots, werewolves, orcs, goblins, ogres, cyclopes, titans, Talos, centaurs, minotaurs, pegasi, griffins, harpies, Cerberus, the chimera, the sphinx, satyrs, mermaids, sea serpents, Nessie and more.
 - ⛰️ **Landscape:** raise, dig or flatten the ground (with soil, stone, sand, snow or mud), drop a mountain, lake or island with a click, and plant any of the ~40 plant types. Paint springs and drains to make rivers.
 - ⚡ **Powers:** lightning, meteor, explosion, earthquake, smite, bless (offspring), grow plants, scatter food, heat wave, ice age, found an ant colony.
 - 🌋 **Special events:**
@@ -135,6 +158,9 @@ src/js/world.js         the cell grid: simulation + pixel rendering
 src/js/flora.js         plant structures (trees, cacti, coral, ...)
 src/js/species.js       creature pixel art and behaviour parameters
 src/js/species-more.js  sprite generators (quadrupeds, birds, fish) and most species
+src/js/species-world.js humanoid sprite generator, deep-sea/hive/lawn species
+src/js/fantasy.js       fantasy & mythical creatures and their magic
+src/js/hive.js          beehive colonies
 src/js/creatures.js     creature AI and the ecosystem
 src/js/ants.js          ant colonies
 src/js/weather.js       clouds, precipitation, lightning
@@ -142,6 +168,7 @@ src/js/background.js    sky, sun/moon/stars, parallax scenery, aurora
 src/js/terrain.js       landscaping tools (raise/lower/flatten, mountains, lakes)
 src/js/events.js        special events (volcano, tornado, black hole, ...)
 src/js/biomes.js        biome definitions and terrain generators
+src/js/biomes-more.js   pond, river, deep sea, beehive, lawn, wetlands, mesa, oasis, enchanted forest
 src/js/god.js           god-mode tools and UI panels
 src/js/app.js           main loop, lighting, settings, desktop bridge
 ```

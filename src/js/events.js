@@ -59,7 +59,7 @@
       const W = this.W;
       // global events don't stack: restart instead
       if (!d[2]) this.list = this.list.filter((e) => { if (e.type === type) { this.finish(e); return false; } return true; });
-      const e = { type, t: 0, dur: d[3] * 60, x: U.clamp(x == null ? U.rand(W.w * 0.2, W.w * 0.8) : x, 4, W.w - 5), y: y == null ? W.h * 0.4 : y };
+      const e = { type, t: 0, dur: d[3] * 60, x: U.clamp(x == null ? this.app.cam.x + U.rand(-0.3, 0.3) * this.app.view().w : x, 4, W.w - 5), y: y == null ? this.app.view().y + this.app.view().h * 0.4 : y };
       this.init(e);
       this.list.push(e);
       this.app.toast(`${d[1]} ${d[0]}!`);

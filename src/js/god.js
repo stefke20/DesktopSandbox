@@ -20,10 +20,11 @@
   ];
   const TERRAIN_MATS = [['soil', 'Soil & grass'], ['stone', 'Stone'], ['sand', 'Sand'], ['snow', 'Snow'], ['clay', 'Mud']];
   const FLORA_GROUPS = [
-    ['Trees', ['tree', 'oak', 'birch', 'maple', 'cherry', 'willow', 'fruittree', 'pine', 'spruce', 'cypress', 'palm', 'jungle', 'baobab', 'acacia', 'mangrove', 'joshua', 'deadtree']],
+    ['Trees', ['tree', 'oak', 'birch', 'maple', 'cherry', 'willow', 'fruittree', 'pine', 'spruce', 'cypress', 'palm', 'jungle', 'baobab', 'acacia', 'mangrove', 'joshua', 'datepalm', 'juniper', 'deadtree']],
     ['Shrubs & desert', ['bush', 'berrybush', 'hedge', 'bamboo', 'deadbush', 'cactus', 'pricklypear', 'agave', 'fern', 'fern2']],
     ['Grasses & flowers', ['tuft', 'tallgrass', 'flower', 'tulip', 'lavender', 'sunflower', 'reed', 'cattail', 'mushroom', 'bigmushroom']],
-    ['Water plants', ['lily', 'seaweed', 'seagrass', 'kelp', 'coral', 'anemone']],
+    ['Water plants', ['lily', 'seaweed', 'seagrass', 'kelp', 'coral', 'anemone', 'tubeworm']],
+    ['Bug\'s-eye giants', ['blade', 'dandelion', 'clover']],
   ];
 
   const POWERS = [
@@ -116,6 +117,8 @@
       document.getElementById('zoom-in').addEventListener('click', () => this.app.zoomBy(1));
       document.getElementById('zoom-out').addEventListener('click', () => this.app.zoomBy(-1));
       window.addEventListener('keydown', (e) => this.onKey(e));
+      document.addEventListener('mouseleave', () => { this.app.mouse = null; });
+      window.addEventListener('blur', () => { this.app.mouse = null; });
     }
 
     setBrush(v) {
@@ -284,6 +287,7 @@
         el('div', { class: 'row' }, el('label', {}, 'Pixel size'), select('scale', [[2, '2 (tiny, slow)'], [3, '3'], [4, '4'], [5, '5'], [6, '6 (chunky)']])),
         el('div', { class: 'row' }, el('label', {}, 'Frame rate'), select('fps', [[60, '60 fps'], [30, '30 fps (saves battery)']])),
         el('div', { class: 'row' }, el('label', {}, 'Show info'), check('showHud'), el('span', {}, 'clock & weather'), check('showStats'), el('span', {}, 'population')),
+        el('div', { class: 'row' }, el('label', {}, 'Edge scrolling'), check('edgePan'), el('span', {}, 'move the mouse to a screen edge to look around')),
         el('div', { class: 'row' }, el('label', {}, 'Hide controls after'), select('idleDelay', [[3, '3 s'], [5, '5 s'], [10, '10 s'], [30, '30 s'], [0, 'never']])),
         el('h4', {}, 'Idle mode'),
         el('div', { class: 'row' }, el('label', {}, 'Change biome every'), select('autoCycle', [[0, 'never'], [5, '5 minutes'], [15, '15 minutes'], [30, '30 minutes'], [60, '1 hour']])),
@@ -353,6 +357,7 @@
     }
 
     onMove(e) {
+      this.app.mouse = { x: e.clientX, y: e.clientY, overUI: !!(e.target && e.target.closest && e.target.closest('#ui')) };
       if (this.panning) {
         const s = this.app.view().s;
         this.app.panBy(-(e.clientX - this.panning[0]) / s, -(e.clientY - this.panning[1]) / s);

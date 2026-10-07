@@ -543,6 +543,69 @@
     return out;
   };
 
+
+  B.datepalm = (rng) => {
+    const out = B.palm(rng);
+    const top = out.find((e) => e[2] === M.WOOD && e[3] === 1) || [0, -10];
+    for (let i = -1; i <= 1; i++) out.push([top[0] + i, top[1] + 2, M.BERRY, 0, 2], [top[0] + i, top[1] + 3, M.BERRY, 0, 2]);
+    return out;
+  };
+
+  B.juniper = (rng) => {
+    const out = [];
+    const h = ri(rng, 3, 6);
+    let x = 0;
+    for (let y = 0; y < h; y++) { if (rng() < 0.4) x += rng() < 0.5 ? -1 : 1; out.push([x, -y, M.WOOD, y === h - 1 ? 2 : 0]); }
+    blob(out, x, -h - 1, ri(rng, 2, 3), 1, M.NEEDLE, rng, 0.8);
+    blob(out, x + ri(rng, -2, 2), -h + 1, 2, 1, M.NEEDLE, rng, 0.7);
+    return out;
+  };
+
+  B.tubeworm = (rng) => {
+    const out = [];
+    for (let s = -2; s <= 2; s++) {
+      const h = ri(rng, 3, 9);
+      for (let y = 0; y < h; y++) out.push([s, -y, M.FUNGUS, 0, 2]);
+      out.push([s, -h, M.BERRY, 0, 0]);
+    }
+    return out;
+  };
+
+  // giant grass blade for the bug's-eye lawn
+  B.blade = (rng) => {
+    const out = [];
+    const h = ri(rng, 25, 85);
+    const bend = (rng() < 0.5 ? -1 : 1) * rng() * 0.25;
+    const shade = ri(rng, 0, 3);
+    for (let y = 0; y < h; y++) {
+      const x = Math.round((bend * y * y) / h);
+      out.push([x, -y, M.TALLGRASS, 0, shade]);
+      if (y < h * 0.7) out.push([x + 1, -y, M.TALLGRASS, 0, (shade + 1) & 3]);
+    }
+    return out;
+  };
+
+  B.dandelion = (rng) => {
+    const out = [];
+    const h = ri(rng, 45, 90);
+    for (let y = 0; y < h; y++) out.push([Math.round(Math.sin(y * 0.08) * 1.5), -y, M.PLANT, 0, 1]);
+    const tx = Math.round(Math.sin(h * 0.08) * 1.5);
+    const puff = rng() < 0.4;
+    blob(out, tx, -h - 4, 5, 4, M.FLOWER, rng, 1);
+    for (const e of out) if (e[2] === M.FLOWER) e[4] = puff ? 3 : 1;
+    for (let i = 0; i < 6; i++) { const ly = -ri(rng, 1, 8), d = rng() < 0.5 ? -1 : 1; for (let k = 1; k <= 5; k++) out.push([d * k, ly - Math.floor(k / 2), M.LEAF]); }
+    return out;
+  };
+
+  B.clover = (rng) => {
+    const out = [];
+    const h = ri(rng, 10, 26);
+    for (let y = 0; y < h; y++) out.push([0, -y, M.PLANT, 0, 2]);
+    for (const [dx, dy] of [[-4, -1], [4, -1], [0, -4]]) blob(out, dx, -h + dy, 3, 3, M.LEAF, rng, 1);
+    if (rng() < 0.3) blob(out, 0, -h - 6, 2, 2, M.FLOWER, rng, 1);
+    return out;
+  };
+
   // names shown in the terrain/vegetation panel
   const LABELS = {
     tree: 'Tree', oak: 'Oak', birch: 'Birch', maple: 'Maple (autumn)', cherry: 'Cherry blossom', willow: 'Willow',
@@ -551,13 +614,13 @@
     cactus: 'Saguaro', pricklypear: 'Prickly pear', agave: 'Agave', bush: 'Bush', berrybush: 'Berry bush', hedge: 'Hedge',
     deadbush: 'Dry shrub', fern: 'Giant fern', fern2: 'Fern', tuft: 'Grass tuft', tallgrass: 'Tall grass', flower: 'Wildflower',
     tulip: 'Tulip', lavender: 'Lavender', sunflower: 'Sunflower', reed: 'Reed', cattail: 'Cattail', mushroom: 'Mushroom',
-    bigmushroom: 'Toadstool', lily: 'Lily pad', seaweed: 'Seaweed', seagrass: 'Seagrass', kelp: 'Kelp', coral: 'Coral', anemone: 'Anemone',
+    bigmushroom: 'Toadstool', datepalm: 'Date palm', juniper: 'Juniper', tubeworm: 'Tube worms', blade: 'Giant grass blade', dandelion: 'Giant dandelion', clover: 'Giant clover', lily: 'Lily pad', seaweed: 'Seaweed', seagrass: 'Seagrass', kelp: 'Kelp', coral: 'Coral', anemone: 'Anemone',
   };
 
   DS.Flora = {
     builders: B,
     labels: LABELS,
-    aquatic: new Set(['seaweed', 'seagrass', 'kelp', 'coral', 'anemone']),
+    aquatic: new Set(['seaweed', 'seagrass', 'kelp', 'coral', 'anemone', 'tubeworm']),
 
     build(kind, rng = Math.random) {
       const fn = B[kind] || B.tuft;

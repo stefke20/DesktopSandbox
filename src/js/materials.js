@@ -62,6 +62,10 @@
     ['BERRY',     { kind: 'static', veg: true, flammable: 0.05, burn: 10, edible: true, colors: ['#d02a3a', '#3a3ac8', '#e84a5a', '#6a2a8a'] }],
     ['SPRING',    { kind: 'static', solid: true, colors: ['#3a6aa8', '#4a7ab8', '#2a5a98', '#5a8ac8'] }],
     ['DRAIN',     { kind: 'static', solid: true, colors: ['#1a1a22', '#22222a', '#141418', '#2a2a32'] }],
+    ['COMB',      { kind: 'static', solid: true, flammable: 0.03, burn: 60, colors: ['#c88a1a', '#b07818', '#d8a02a', '#a06a14'] }],
+    ['HONEY',     { kind: 'liquid', density: 2.3, spread: 1, edible: true, colors: ['#f0a018', '#e89010', '#f8b028', '#e09818'], alpha: 235 }],
+    ['BROOD',     { kind: 'static', solid: true, edible: true, colors: ['#f4ecd8', '#ece0c8', '#f8f4e4', '#e8dcc0'] }],
+    ['HVENT',     { kind: 'static', solid: true, glow: '#ff7a2a', colors: ['#3a2a26', '#4a3028', '#2e2220', '#5a3424'] }],
     ['FUNGUS',    { kind: 'static', veg: true, edible: true, colors: ['#e8dcc0', '#d8c8a8', '#f4ead4', '#cbb994'] }],
   ];
 

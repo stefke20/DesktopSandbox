@@ -4,7 +4,7 @@
   const DS = window.DS;
   const { U, M, MP } = DS;
 
-  const FOOD = new Set([M.LEAF, M.NEEDLE, M.LITTER, M.PLANT, M.FLOWER, M.SEED, M.VINE, M.LILY]);
+  const FOOD = new Set([M.LEAF, M.NEEDLE, M.LITTER, M.PLANT, M.FLOWER, M.SEED, M.VINE, M.LILY, M.TALLGRASS, M.AUTUMN, M.BERRY]);
 
   class Colony {
     constructor(x, y, ex) {
@@ -32,7 +32,7 @@
       if (this.t % 70 === 0 && this.food >= 2 && n < this.max && eco.list.length < eco.cap) {
         this.food -= 2;
         const q = this.queen;
-        const a = eco.spawn('ant', q.x, q.y, { colony: this, newborn: true });
+        const a = eco.spawn(this.workerId, q.x, q.y, { colony: this, newborn: true });
         if (a) eco.fx.add(q.x, q.y - 1, 0, -0.05, '#f4f0e0', 30, 0);
       }
       // the colony slowly eats its fungus garden when hungry
@@ -108,9 +108,11 @@
       }
       const col = new Colony(cx, cy, x);
       eco.colonies.push(col);
-      col.queen = eco.spawn('antqueen', cx, cy + 1, { colony: col });
+      col.queenId = opts.queen || 'antqueen';
+      col.workerId = opts.worker || 'ant';
+      col.queen = eco.spawn(col.queenId, cx, cy + 1, { colony: col });
       const workers = opts.workers == null ? 6 : opts.workers;
-      for (let i = 0; i < workers; i++) eco.spawn('ant', cx + U.randInt(-3, 3), cy, { colony: col });
+      for (let i = 0; i < workers; i++) eco.spawn(col.workerId, cx + U.randInt(-3, 3), cy, { colony: col });
       return col;
     },
 
