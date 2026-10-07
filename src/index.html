@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;" />
+  <title>Pixel Terrarium</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <canvas id="screen"></canvas>
+
+  <div id="hud">
+    <div id="hud-line"></div>
+    <div id="hud-badges"></div>
+  </div>
+  <div id="tooltip"></div>
+  <div id="stats" class="hidden"></div>
+
+  <div id="ui">
+    <div id="panel" class="hidden"></div>
+    <div id="dock">
+      <select id="biome" title="Biome (B = next)"></select>
+      <button class="dock-btn" data-tab="hand" title="Hand: pick up and throw creatures (Esc)">✋</button>
+      <button class="dock-btn" data-tab="paint" title="Paint elements">🖌️</button>
+      <button class="dock-btn" data-tab="life" title="Create life">🐾</button>
+      <button class="dock-btn" data-tab="powers" title="Godly powers">⚡</button>
+      <button class="dock-btn" data-tab="weather" title="Weather">🌦️</button>
+      <button class="dock-btn" data-tab="time" title="Time of day">🕑</button>
+      <button class="dock-btn" data-tab="settings" title="Settings">⚙️</button>
+      <span id="tool-label"></span>
+    </div>
+  </div>
+
+  <script src="js/util.js"></script>
+  <script src="js/materials.js"></script>
+  <script src="js/flora.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/species.js"></script>
+  <script src="js/sprites.js"></script>
+  <script src="js/fx.js"></script>
+  <script src="js/creatures.js"></script>
+  <script src="js/ants.js"></script>
+  <script src="js/weather.js"></script>
+  <script src="js/background.js"></script>
+  <script src="js/biomes.js"></script>
+  <script src="js/god.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

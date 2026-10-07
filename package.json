@@ -1,0 +1,27 @@
+{
+  "name": "pixel-terrarium",
+  "productName": "Pixel Terrarium",
+  "version": "0.1.0",
+  "description": "A living 2D pixel sandbox for your desktop. Watch biomes go about their day, or play god.",
+  "main": "main.js",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "web": "npx --yes http-server src -p 8080 -c-1",
+    "icon": "node scripts/make-icon.js",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^44.6.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.pixelterrarium.app",
+    "productName": "Pixel Terrarium",
+    "files": ["main.js", "preload.js", "src/**/*", "assets/**/*"],
+    "icon": "assets/icon.png",
+    "win": { "target": "nsis" },
+    "mac": { "target": "dmg", "category": "public.app-category.entertainment" },
+    "linux": { "target": "AppImage", "category": "Game" }
+  }
+}

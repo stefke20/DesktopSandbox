@@ -1,0 +1,500 @@
+// God mode: tools, panels, keyboard and pointer interaction.
+(function () {
+  'use strict';
+  const DS = window.DS;
+  const { U, M, MP } = DS;
+  const S = DS.Species;
+
+  const PAINT = [
+    ['SAND', 'Sand'], ['DIRT', 'Dirt'], ['STONE', 'Stone'], ['WATER', 'Water'], ['LAVA', 'Lava'],
+    ['SNOW', 'Snow'], ['ICE', 'Ice'], ['FIRE', 'Fire'], ['OIL', 'Oil'], ['TOXIC', 'Toxic sludge'],
+    ['SEED', 'Seeds'], ['GRASS', 'Grass'], ['WOOD', 'Wood'], ['LEAF', 'Leaves'], ['MUD', 'Mud'],
+    ['BRICK', 'Brick'], ['GLASS', 'Glass'], ['CONCRETE', 'Concrete'], ['METAL', 'Metal'], ['ASH', 'Ash'],
+    ['VENT', 'Lava vent'], ['EMBERS', 'Eternal flame'], ['SMOKE', 'Smoke'], ['STEAM', 'Steam'], ['ERASE', 'Eraser'],
+  ];
+
+  const POWERS = [
+    ['lightning', '⚡', 'Lightning', true],
+    ['meteor', '☄️', 'Meteor', true],
+    ['bomb', '💥', 'Explosion', true],
+    ['quake', '〰️', 'Earthquake', true],
+    ['smite', '💀', 'Smite', false],
+    ['bless', '💞', 'Bless (offspring)', false],
+    ['grow', '🌱', 'Grow plants', false],
+    ['feed', '🍃', 'Scatter food', false],
+    ['heat', '🔥', 'Heat wave', true],
+    ['cold', '🧊', 'Ice age', true],
+    ['colony', '🐜', 'Ant colony', true],
+  ];
+
+  const WEATHER = [
+    ['auto', '🔁', 'Auto'], ['clear', '☀️', 'Clear'], ['cloudy', '☁️', 'Cloudy'], ['rain', '🌧️', 'Rain'],
+    ['storm', '⛈️', 'Thunderstorm'], ['snow', '🌨️', 'Snow'], ['sandstorm', '🌪️', 'Sandstorm'],
+    ['ashfall', '🌋', 'Ash fall'], ['fog', '🌫️', 'Fog'],
+  ];
+
+  const el = (tag, attrs = {}, ...kids) => {
+    const e = document.createElement(tag);
+    for (const k in attrs) {
+      if (k === 'class') e.className = attrs[k];
+      else if (k.startsWith('on')) e.addEventListener(k.slice(2), attrs[k]);
+      else if (k === 'html') e.innerHTML = attrs[k];
+      else e.setAttribute(k, attrs[k]);
+    }
+    for (const c of kids) if (c != null) e.append(c);
+    return e;
+  };
+
+  class God {
+    constructor(app) {
+      this.app = app;
+      this.tool = { kind: 'hand' };
+      this.brush = 4;
+      this.tab = null;
+      this.down = false;
+      this.button = 0;
+      this.pos = null;
+      this.last = null;
+      this.vel = [0, 0];
+      this.held = null;
+      this.timer = 0;
+      this.panel = document.getElementById('panel');
+      this.label = document.getElementById('tool-label');
+      this.tooltip = document.getElementById('tooltip');
+      this.bind();
+      this.setTool({ kind: 'hand' }, 'Hand');
+    }
+
+    get world() { return this.app.world; }
+    get eco() { return this.app.eco; }
+
+    // ------------------------------------------------------------ dock & panels
+    bind() {
+      document.querySelectorAll('.dock-btn').forEach((b) =>
+        b.addEventListener('click', () => {
+          const tab = b.dataset.tab;
+          if (tab === 'hand') { this.setTool({ kind: 'hand' }, 'Hand'); this.openTab(this.tab === 'hand' ? null : 'hand'); return; }
+          this.openTab(this.tab === tab ? null : tab);
+        }));
+      const sel = document.getElementById('biome');
+      for (const b of DS.Biomes) sel.append(el('option', { value: b.id }, `${b.icon}  ${b.name}`));
+      sel.addEventListener('change', () => { this.app.loadBiome(sel.value); sel.blur(); });
+
+      const cv = this.app.canvas;
+      cv.addEventListener('pointerdown', (e) => this.onDown(e));
+      window.addEventListener('pointermove', (e) => this.onMove(e));
+      window.addEventListener('pointerup', (e) => this.onUp(e));
+      cv.addEventListener('contextmenu', (e) => e.preventDefault());
+      cv.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        this.setBrush(this.brush + (e.deltaY < 0 ? 1 : -1));
+      }, { passive: false });
+      window.addEventListener('keydown', (e) => this.onKey(e));
+    }
+
+    setBrush(v) {
+      this.brush = U.clamp(v, 1, 30);
+      const r = document.getElementById('brush-range');
+      if (r) r.value = this.brush;
+    }
+
+    openTab(tab) {
+      this.tab = tab;
+      document.querySelectorAll('.dock-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab || (b.dataset.tab === 'hand' && this.tool.kind === 'hand' && !tab)));
+      if (!tab) { this.panel.classList.add('hidden'); return; }
+      this.panel.classList.remove('hidden');
+      this.renderPanel();
+    }
+
+    refresh() { if (this.tab) this.renderPanel(); }
+
+    renderPanel() {
+      const p = this.panel;
+      p.innerHTML = '';
+      const app = this.app;
+      const brushRow = () => el('div', { class: 'row' }, el('label', {}, 'Brush size'),
+        el('input', { type: 'range', min: 1, max: 30, value: this.brush, id: 'brush-range', oninput: (e) => this.setBrush(+e.target.value) }));
+      switch (this.tab) {
+        case 'hand':
+          p.append(el('h4', {}, 'Hand of god'),
+            el('div', { class: 'hint', html: 'Click and drag a creature to pick it up, then let go to throw it. Hover to see what it is doing.' }));
+          break;
+        case 'paint': {
+          p.append(el('h4', {}, 'Paint elements'));
+          const g = el('div', { class: 'grid' });
+          for (const [name, label] of PAINT) {
+            const col = name === 'ERASE' ? 'transparent' : MP.colorsHex[M[name]][0];
+            const active = this.tool.kind === 'paint' && this.tool.mat === name;
+            g.append(el('button', { class: 'chip' + (active ? ' active' : ''), onclick: () => { this.setTool({ kind: 'paint', mat: name }, label); this.renderPanel(); } },
+              el('span', { class: 'sw', style: `background:${col};${name === 'ERASE' ? 'border:1px dashed #aaa' : ''}` }), label));
+          }
+          p.append(g, brushRow(), el('div', { class: 'hint', html: 'Left-drag to paint · right-drag to erase · mouse wheel changes brush size.' }));
+          break;
+        }
+        case 'life': {
+          const native = (app.biome.fauna || []).map(([id]) => id);
+          const chip = (id) => {
+            const sp = S[id];
+            const active = this.tool.kind === 'spawn' && this.tool.id === id;
+            return el('button', { class: 'chip' + (active ? ' active' : ''), title: sp.name, onclick: () => { this.setTool({ kind: 'spawn', id }, sp.name); this.renderPanel(); } },
+              el('img', { src: DS.Sprites.icon(sp, 3) }), sp.name);
+          };
+          p.append(el('h4', {}, `Native to ${app.biome.name}`));
+          const g1 = el('div', { class: 'grid' });
+          native.forEach((id) => g1.append(chip(id)));
+          p.append(g1, el('h4', {}, 'All creatures'));
+          const g2 = el('div', { class: 'grid' });
+          Object.keys(S).filter((id) => !native.includes(id)).sort((a, b) => S[a].name.localeCompare(S[b].name)).forEach((id) => g2.append(chip(id)));
+          p.append(g2, el('div', { class: 'hint', html: 'Click to create; hold and drag to create several. Sea creatures look for the nearest water.' }));
+          break;
+        }
+        case 'powers': {
+          p.append(el('h4', {}, 'Godly powers'));
+          const g = el('div', { class: 'grid' });
+          for (const [id, icon, label] of POWERS) {
+            const active = this.tool.kind === 'power' && this.tool.id === id;
+            g.append(el('button', { class: 'chip' + (active ? ' active' : ''), onclick: () => { this.setTool({ kind: 'power', id }, label); this.renderPanel(); } }, `${icon} ${label}`));
+          }
+          p.append(g, brushRow());
+          break;
+        }
+        case 'weather': {
+          p.append(el('h4', {}, 'Weather'));
+          const g = el('div', { class: 'grid' });
+          const w = app.weather;
+          for (const [id, icon, label] of WEATHER) {
+            const active = id === 'auto' ? w.auto : !w.auto && w.type === id;
+            g.append(el('button', { class: 'chip' + (active ? ' active' : ''), onclick: () => { app.setWeather(id); this.renderPanel(); } }, `${icon} ${label}`));
+          }
+          p.append(g, el('div', { class: 'row' }, el('label', {}, 'Wind'),
+            el('input', { type: 'range', min: -25, max: 25, value: Math.round(w.targetWind * 10), oninput: (e) => { w.targetWind = +e.target.value / 10; } })));
+          break;
+        }
+        case 'time': {
+          p.append(el('h4', {}, 'Time of day'));
+          const g = el('div', { class: 'grid' });
+          for (const [t, label] of [[0.25, '🌅 Sunrise'], [0.5, '☀️ Noon'], [0.75, '🌇 Sunset'], [0, '🌙 Midnight']])
+            g.append(el('button', { class: 'chip', onclick: () => { app.setTime(t); this.renderPanel(); } }, label));
+          p.append(g);
+          p.append(el('div', { class: 'row' }, el('label', {}, 'Time'),
+            el('input', { type: 'range', min: 0, max: 1000, value: Math.round(app.time * 1000), oninput: (e) => app.setTime(+e.target.value / 1000) })));
+          const daySel = el('select', { onchange: (e) => app.setSetting('dayMinutes', +e.target.value) });
+          for (const [v, l] of [[0, 'Frozen'], [3, '3 minutes'], [12, '12 minutes'], [30, '30 minutes'], [60, '1 hour'], [-1, 'Real clock']])
+            daySel.append(el('option', Object.assign({ value: v }, app.settings.dayMinutes === v ? { selected: '' } : {}), l));
+          p.append(el('div', { class: 'row' }, el('label', {}, 'Length of a day'), daySel));
+          p.append(el('h4', {}, 'Simulation speed'));
+          const g2 = el('div', { class: 'grid' });
+          for (const [v, l] of [[0, '⏸ Pause'], [1, '▶ 1×'], [2, '⏩ 2×'], [4, '⏩ 4×']])
+            g2.append(el('button', { class: 'chip' + (app.speed === v ? ' active' : ''), onclick: () => { app.setSpeed(v); this.renderPanel(); } }, l));
+          p.append(g2);
+          break;
+        }
+        case 'settings':
+          this.renderSettings(p);
+          break;
+      }
+    }
+
+    renderSettings(p) {
+      const app = this.app, st = app.settings;
+      const select = (key, opts, onChange) => {
+        const s = el('select', { onchange: (e) => { const v = isNaN(+e.target.value) ? e.target.value : +e.target.value; onChange ? onChange(v) : app.setSetting(key, v); } });
+        for (const [v, l] of opts) s.append(el('option', Object.assign({ value: v }, st[key] === v ? { selected: '' } : {}), l));
+        return s;
+      };
+      const check = (key, onChange) => el('input', { type: 'checkbox', ...(st[key] ? { checked: '' } : {}), onchange: (e) => (onChange ? onChange(e.target.checked) : app.setSetting(key, e.target.checked)) });
+      p.append(el('h4', {}, 'Display'),
+        el('div', { class: 'row' }, el('label', {}, 'Pixel size'), select('scale', [[2, '2 (tiny, slow)'], [3, '3'], [4, '4'], [5, '5'], [6, '6 (chunky)']])),
+        el('div', { class: 'row' }, el('label', {}, 'Frame rate'), select('fps', [[60, '60 fps'], [30, '30 fps (saves battery)']])),
+        el('div', { class: 'row' }, el('label', {}, 'Show info'), check('showHud'), el('span', {}, 'clock & weather'), check('showStats'), el('span', {}, 'population')),
+        el('div', { class: 'row' }, el('label', {}, 'Hide controls after'), select('idleDelay', [[3, '3 s'], [5, '5 s'], [10, '10 s'], [30, '30 s'], [0, 'never']])),
+        el('h4', {}, 'Idle mode'),
+        el('div', { class: 'row' }, el('label', {}, 'Change biome every'), select('autoCycle', [[0, 'never'], [5, '5 minutes'], [15, '15 minutes'], [30, '30 minutes'], [60, '1 hour']])),
+      );
+      if (window.desktop) {
+        const d = window.desktop;
+        p.append(el('h4', {}, 'Desktop'));
+        const g = el('div', { class: 'grid' });
+        for (const [m, l] of [['window', '🪟 Window'], ['strip', '▁ Desktop strip'], ['wallpaper', '🖼️ Full-screen wallpaper']])
+          g.append(el('button', { class: 'chip' + (app.desk.mode === m ? ' active' : ''), onclick: () => { d.setMode(m); app.desk.mode = m; this.renderPanel(); } }, l));
+        p.append(g,
+          el('div', { class: 'row' }, el('label', {}, 'Strip height'), select('stripHeight', [[0.2, '20%'], [0.3, '30%'], [0.4, '40%'], [0.5, '50%']], (v) => { app.setSetting('stripHeight', v); d.setStripHeight(v); })),
+          el('div', { class: 'row' }, el('label', {}, 'Always on top'), el('input', { type: 'checkbox', ...(app.desk.alwaysOnTop ? { checked: '' } : {}), onchange: (e) => { d.setAlwaysOnTop(e.target.checked); app.desk.alwaysOnTop = e.target.checked; } })),
+          el('div', { class: 'row' }, el('label', {}, 'Start with computer'), el('input', { type: 'checkbox', ...(app.desk.openAtLogin ? { checked: '' } : {}), onchange: (e) => { d.setOpenAtLogin(e.target.checked); app.desk.openAtLogin = e.target.checked; } })),
+          el('div', { class: 'row' }, el('button', { class: 'chip', onclick: () => d.setClickThrough(true) }, '👻 Watch only (click-through)'), el('button', { class: 'chip', onclick: () => d.quit() }, '⏻ Quit')),
+          el('div', { class: 'hint', html: 'In watch-only mode clicks pass through to your desktop. Press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>G</kbd> (or use the tray icon) to play god again.' }));
+      }
+      p.append(el('div', { class: 'hint', html: 'Keys: <kbd>H</kbd> hide controls · <kbd>Space</kbd> pause · <kbd>B</kbd> next biome · <kbd>N</kbd> day/night · <kbd>R</kbd> rain · <kbd>I</kbd> population · <kbd>[</kbd> <kbd>]</kbd> brush · <kbd>Esc</kbd> hand' }));
+    }
+
+    setTool(tool, label) {
+      this.tool = tool;
+      this.label.textContent = label;
+      document.body.classList.toggle('tool-hand', tool.kind === 'hand');
+    }
+
+    // ------------------------------------------------------------ input
+    toWorld(e) {
+      const s = this.app.scale;
+      return [e.clientX / s, e.clientY / s];
+    }
+
+    onDown(e) {
+      this.app.poke();
+      const p = this.toWorld(e);
+      this.pos = p;
+      this.last = p;
+      this.down = true;
+      this.button = e.button;
+      this.timer = 0;
+      this.app.canvas.setPointerCapture && this.app.canvas.setPointerCapture(e.pointerId);
+      if (this.tab && this.tab !== 'paint' && this.tab !== 'powers' && this.tab !== 'life') this.openTab(null);
+      if (this.tool.kind === 'hand' && e.button === 0) {
+        const c = this.eco.at(p[0], p[1], 6);
+        if (c) {
+          this.held = c;
+          c.held = true;
+          c.perched = false;
+          c.sleep = false;
+          document.body.classList.add('grabbing');
+        }
+        return;
+      }
+      if (this.tool.kind === 'power') {
+        const def = POWERS.find((q) => q[0] === this.tool.id);
+        if (def && def[3]) this.power(this.tool.id, p[0], p[1]);
+      }
+      if (this.tool.kind === 'spawn') this.spawn(this.tool.id, p[0], p[1]);
+      this.apply();
+    }
+
+    onMove(e) {
+      const p = this.toWorld(e);
+      if (this.pos) this.vel = [p[0] - this.pos[0], p[1] - this.pos[1]];
+      this.pos = p;
+      this.app.poke();
+      if (this.held) {
+        this.held.x = U.clamp(p[0], 1, this.world.w - 2);
+        this.held.y = U.clamp(p[1] + (this.held.sp.h >> 1), 1, this.world.h - 2);
+      }
+      this.updateTooltip(e);
+    }
+
+    onUp() {
+      if (this.held) {
+        const c = this.held;
+        c.held = false;
+        c.thrown = true;
+        c.throwT = 0;
+        c.vx = U.clamp(this.vel[0], -3, 3);
+        c.vy = U.clamp(this.vel[1], -3, 3);
+        this.held = null;
+        document.body.classList.remove('grabbing');
+      }
+      this.down = false;
+    }
+
+    updateTooltip(e) {
+      const tt = this.tooltip;
+      if (this.tool.kind !== 'hand' || !this.pos || this.held) { tt.style.display = 'none'; return; }
+      const c = this.eco.at(this.pos[0], this.pos[1], 5);
+      if (!c) { tt.style.display = 'none'; return; }
+      const sp = c.sp;
+      const doing = c.sleep ? 'sleeping' : c.thrown ? 'flying through the air!' : ({
+        flee: 'running away', hunt: 'hunting', chase: 'chasing', graze: 'eating', idle: 'resting', perch: 'looking for a perch', wander: sp.ant ? (c.carry ? 'carrying ' + (c.job === 'mound' ? 'soil' : 'food') : c.job || 'exploring') : 'wandering',
+      })[c.goal] || c.goal;
+      const hunger = sp.metab ? (c.hunger > 0.7 ? ' · starving' : c.hunger > 0.4 ? ' · hungry' : '') : '';
+      tt.textContent = `${sp.name} — ${doing}${hunger}`;
+      tt.style.display = 'block';
+      tt.style.left = Math.min(window.innerWidth - tt.offsetWidth - 6, e.clientX + 14) + 'px';
+      tt.style.top = e.clientY + 14 + 'px';
+    }
+
+    onKey(e) {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
+      const app = this.app;
+      app.poke();
+      switch (e.key) {
+        case 'h': case 'H': app.toggleUI(); break;
+        case ' ': app.setSpeed(app.speed === 0 ? 1 : 0); e.preventDefault(); break;
+        case 'b': app.nextBiome(1); break;
+        case 'B': app.nextBiome(-1); break;
+        case 'n': case 'N': app.setTime(app.daylight > 0.5 ? 0 : 0.5); break;
+        case 'r': case 'R': app.setWeather(app.weather.type === 'rain' && !app.weather.auto ? 'clear' : 'rain'); break;
+        case 'i': case 'I': app.setSetting('showStats', !app.settings.showStats); break;
+        case '[': this.setBrush(this.brush - 1); break;
+        case ']': this.setBrush(this.brush + 1); break;
+        case 'Escape': this.setTool({ kind: 'hand' }, 'Hand'); this.openTab(null); break;
+        default: return;
+      }
+      this.refresh();
+    }
+
+    // called every simulation tick
+    update() {
+      if (!this.down || !this.pos || this.held) return;
+      this.timer++;
+      this.apply();
+    }
+
+    apply() {
+      const [x, y] = this.pos;
+      const t = this.tool;
+      if (this.button === 2) { this.strokeLine((cx, cy) => this.paintAt(cx, cy, 'ERASE')); return; }
+      switch (t.kind) {
+        case 'paint':
+          this.strokeLine((cx, cy) => this.paintAt(cx, cy, t.mat));
+          break;
+        case 'spawn':
+          if (this.timer > 0 && this.timer % 12 === 0) this.spawn(t.id, x + U.rand(-this.brush, this.brush), y);
+          break;
+        case 'power': {
+          const def = POWERS.find((q) => q[0] === t.id);
+          if (def && !def[3]) this.power(t.id, x, y);
+          break;
+        }
+      }
+      this.last = this.pos;
+    }
+
+    strokeLine(fn) {
+      const [x1, y1] = this.pos;
+      const [x0, y0] = this.last || this.pos;
+      const d = Math.hypot(x1 - x0, y1 - y0);
+      const steps = Math.max(1, Math.ceil(d / Math.max(1, this.brush * 0.5)));
+      for (let i = 0; i <= steps; i++) fn(Math.round(U.lerp(x0, x1, i / steps)), Math.round(U.lerp(y0, y1, i / steps)));
+    }
+
+    paintAt(cx, cy, name) {
+      const W = this.world, r = this.brush;
+      const mat = M[name];
+      const kind = name === 'ERASE' ? -1 : MP.kind[mat];
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (dx * dx + dy * dy > r * r + r * 0.5) continue;
+          const x = cx + dx, y = cy + dy;
+          if (!W.inb(x, y)) continue;
+          const t = W.get(x, y);
+          if (t === M.BEDROCK) continue;
+          if (kind === -1) { if (t !== M.EMPTY) W.set(x, y, M.EMPTY); continue; }
+          if (mat === M.FIRE) {
+            if ((t === M.EMPTY && Math.random() < 0.25) || MP.flammable[t] > 0) W.set(x, y, M.FIRE, 50 + ((Math.random() * 60) | 0));
+            continue;
+          }
+          if (kind === DS.KIND.static) {
+            if (t !== mat) W.set(x, y, mat);
+          } else if ((t === M.EMPTY || MP.kind[t] === DS.KIND.gas) && Math.random() < (kind === DS.KIND.gas ? 0.2 : 0.4)) {
+            W.set(x, y, mat);
+          }
+        }
+      }
+    }
+
+    spawn(id, x, y) {
+      const W = this.world, sp = S[id];
+      x = U.clamp(Math.round(x), 2, W.w - 3);
+      y = U.clamp(Math.round(y), 1, W.h - 2);
+      if (sp.hab === 'water' && !W.isLiquid(x, y)) {
+        let found = null;
+        for (let r = 1; r < 50 && !found; r++) {
+          for (let k = 0; k < 12; k++) {
+            const a = (k / 12) * Math.PI * 2;
+            const px = Math.round(x + Math.cos(a) * r), py = Math.round(y + Math.sin(a) * r);
+            if (W.get(px, py) === M.WATER && W.get(px, py - 2) === M.WATER) { found = [px, py]; break; }
+          }
+        }
+        if (found) [x, y] = found;
+      }
+      if (sp.hab !== 'water' && sp.hab !== 'burrow') {
+        let k = 0;
+        while (k++ < 30 && W.isSolid(x, y)) y--;
+      }
+      const c = this.eco.spawn(id, x, sp.hab === 'water' ? y + (sp.h >> 1) : y);
+      if (c) {
+        c.age = Math.max(c.age, sp.mature + 1);
+        c.hunger = 0.1;
+        this.eco.fx.burst(x, y - sp.h / 2, ['#ffffff', '#fff6b0', '#b0f0ff'], 8, 0.8, 0, 20);
+      }
+    }
+
+    power(id, x, y) {
+      const app = this.app, W = this.world, eco = this.eco, fx = eco.fx;
+      const r = this.brush;
+      switch (id) {
+        case 'lightning': app.weather.strike(x); break;
+        case 'meteor': app.addMeteor(x, y); break;
+        case 'bomb':
+          W.explode(x, y, 6, fx);
+          eco.killNear(x, y, 8, 'burn');
+          fx.burst(x, y, ['#ffd040', '#ff7a1a', '#ff3a10', '#ffffff'], 40, 2.2, 0.05, 30);
+          app.weather.shake = 14;
+          break;
+        case 'quake': app.quake(); break;
+        case 'smite':
+          if (this.timer % 3 === 0) eco.killNear(x, y, r + 1, 'zap');
+          break;
+        case 'bless':
+          if (this.timer % 25 === 0) {
+            for (const c of eco.list.slice()) {
+              if (c.dead || U.dist2(c.x, c.cy, x, y) > (r + 4) * (r + 4)) continue;
+              c.hunger = 0;
+              if (c.sp.ant || c.sp.hab === 'vehicle') continue;
+              if ((eco.count[c.sp.id] || 0) < c.sp.max * 1.5 && eco.list.length < eco.cap && Math.random() < 0.6) eco.birth(c);
+            }
+            fx.glyph(x - 1, y - 4, 'heart', '#ff5a8a');
+          }
+          break;
+        case 'grow':
+          if (this.timer % 3 === 0) {
+            const kinds = app.biome.seeds || [['tree', 1]];
+            for (let k = 0; k < 2; k++) {
+              const gx = Math.round(x + U.rand(-r, r));
+              let gy = Math.round(y - r);
+              while (gy < y + r && gy < W.h - 1 && !W.isSolid(gx, gy) && !W.isLiquid(gx, gy)) gy++;
+              const t = W.get(gx, gy);
+              if (t === M.DIRT || t === M.SOIL) W.set(gx, gy, M.GRASS);
+              if ((t === M.WATER) && W.get(gx, gy - 1) === M.EMPTY) continue;
+              if ([M.DIRT, M.SOIL, M.GRASS, M.SAND, M.MUD, M.SNOW, M.ASH].includes(t) && W.get(gx, gy - 1) === M.EMPTY && Math.random() < 0.4) {
+                W.set(gx, gy - 1, M.PLANT);
+                W.addGrower(gx, gy - 1, U.weighted(kinds));
+              }
+            }
+            fx.add(x + U.rand(-r, r), y + U.rand(-r, r), 0, -0.2, '#9aff6a', 20, 0);
+          }
+          break;
+        case 'feed':
+          if (this.timer % 2 === 0) {
+            for (let k = 0; k < 2; k++) {
+              const px = Math.round(x + U.rand(-r, r)), py = Math.round(y + U.rand(-r, r));
+              if (W.get(px, py) === M.EMPTY) W.set(px, py, Math.random() < 0.5 ? M.SEED : M.LITTER);
+            }
+          }
+          break;
+        case 'heat': app.tempOffset = 30; app.tempOffsetT = 60 * 90; break;
+        case 'cold': app.tempOffset = -40; app.tempOffsetT = 60 * 90; break;
+        case 'colony': {
+          const col = DS.Ants.found(eco, Math.round(x), Math.round(y));
+          if (col) fx.burst(col.ex, W.groundY(col.ex) - 2, ['#ffffff', '#fff6b0'], 10, 0.8, 0, 20);
+          break;
+        }
+      }
+    }
+
+    drawOverlay(ctx, scale) {
+      if (!this.pos || document.body.classList.contains('idle')) return;
+      const t = this.tool;
+      if (t.kind === 'hand') return;
+      const showBrush = t.kind === 'paint' || (t.kind === 'power' && ['smite', 'bless', 'grow', 'feed'].includes(t.id));
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      const r = showBrush ? (this.brush + 0.5) * scale : 4 * scale;
+      ctx.arc(this.pos[0] * scale, this.pos[1] * scale, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  DS.God = God;
+})();
