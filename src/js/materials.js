@@ -78,6 +78,7 @@
     ['TILLED',    { kind: 'static', solid: true, dig: true, colors: ['#5a3a20', '#4e321c', '#664226', '#52361e'] }],
     ['WHEAT',     { kind: 'static', veg: true, flammable: 0.15, burn: 10, edible: true, colors: ['#6ab03a', '#d8b040', '#e8c450', '#c8a030'] }],
     ['BANNER',    { kind: 'static', veg: true, flammable: 0.1, burn: 20, colors: ['#3a6ad8', '#d83a3a', '#e8c030', '#9a3ad8'] }],
+    ['ROAD',      { kind: 'static', solid: true, colors: ['#8a6a48', '#8e8a84', '#3e3e44', '#7a5a3a'] }],
     // ---- off-world materials
     ['REGOLITH',  { kind: 'powder', density: 2.4, sticky: 0.6, dig: true, colors: ['#9a9a9e', '#8a8a8e', '#a8a8ac', '#7e7e82'] }],
     ['MOONROCK',  { kind: 'static', solid: true, colors: ['#6e6e74', '#626268', '#7a7a80', '#58585e'] }],

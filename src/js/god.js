@@ -368,14 +368,14 @@
         const pending = col.buildings.filter((b) => !b.done);
         if (pending.length) p.append(el('div', { class: 'hint' }, 'Under construction: ' + pending.map((b) => `${C.BUILDINGS[b.type].name} ${Math.floor((b.placed / b.cells.length) * 100)}%`).join(', ')));
       } else {
-        p.append(el('div', { class: 'hint' }, 'Plant a flag, then click in the world. Your people will focus their work around it for a few minutes.'));
+        p.append(el('div', { class: 'hint' }, 'Pick an order, then click in the world. About half of your people (the nearest ones) drop what they are doing and work at the flag for 3 minutes. Attack sends every soldier, or a militia if you have none.'));
         const g = el('div', { class: 'grid' });
         for (const [id, l] of [['gather', '🌳 Gather here (trees, berries)'], ['hunt', '🦌 Hunt & fish here'], ['mine', '⛏️ Mine / quarry here'], ['build', '🔨 Build here'], ['attack', '⚔️ Attack here']]) {
           const active = this.tool.kind === 'guide' && this.tool.id === id;
           const m = col.markers[id];
           g.append(el('button', { class: 'chip' + (active ? ' active' : ''), onclick: () => { this.setTool({ kind: 'guide', id }, l.slice(3) + ': click in the world'); this.renderPanel(); } }, l + (m && m.t > 0 ? ' 🚩' : '')));
         }
-        p.append(g, el('div', { class: 'row' }, el('button', { class: 'chip', onclick: () => { col.markers = {}; this.renderPanel(); } }, '✖ Clear all flags')));
+        p.append(g, el('div', { class: 'row' }, el('button', { class: 'chip', onclick: () => { civ.clearOrders(col); this.renderPanel(); } }, '✖ Clear all flags')));
       }
     }
 
@@ -515,6 +515,17 @@
       const tt = this.tooltip;
       if (this.tool.kind !== 'hand' || !this.pos || this.held) { tt.style.display = 'none'; return; }
       const c = this.eco.at(this.pos[0], this.pos[1], 5);
+      const civ = this.app.civ;
+      let text = null;
+      if (c && c.sp.civ && civ) text = civ.describe(c);
+      else if (!c && civ) text = civ.buildingAt(this.pos[0], this.pos[1]);
+      if (text) {
+        tt.textContent = text;
+        tt.style.display = 'block';
+        tt.style.left = Math.min(window.innerWidth - tt.offsetWidth - 6, e.clientX + 14) + 'px';
+        tt.style.top = e.clientY + 14 + 'px';
+        return;
+      }
       if (!c) { tt.style.display = 'none'; return; }
       const sp = c.sp;
       const doing = c.sleep ? 'sleeping' : c.thrown ? 'flying through the air!' : ({

@@ -86,13 +86,20 @@
   const BUILDINGS = {
     center: { name: 'Town center', tech: null, cost: {}, w: 9 },
     campfire: { name: 'Campfire', tech: 'fire', cost: { wood: 5 }, w: 5 },
-    hut: { name: 'Hut', tech: 'huts', cost: { wood: 15 }, w: 9, housing: 4 },
+    hut: { name: 'Hut', tech: 'huts', cost: { wood: 15 }, w: 11, housing: 3, home: 1 },
+    cottage: { name: 'Timber cottage', tech: 'huts', minEra: 2, cost: { wood: 25, stone: 5 }, w: 11, housing: 4, home: 2 },
     farm: { name: 'Farm', tech: 'agriculture', cost: { wood: 10 }, w: 16 },
     pen: { name: 'Animal pen', tech: 'domestication', cost: { wood: 20 }, w: 16 },
     mine: { name: 'Mine', tech: 'mining', cost: { wood: 25 }, w: 7 },
     smithy: { name: 'Smithy', tech: 'bronze', cost: { stone: 20, wood: 10 }, w: 9 },
     library: { name: 'Library', tech: 'writing', cost: { stone: 30, wood: 20 }, w: 11 },
-    house: { name: 'Stone house', tech: 'masonry', cost: { stone: 30, wood: 20 }, w: 12, housing: 8 },
+    house: { name: 'Stone house', tech: 'masonry', minEra: 3, cost: { stone: 30, wood: 20 }, w: 11, housing: 5, home: 3 },
+    townhouse: { name: 'Brick townhouse', tech: 'masonry', minEra: 4, cost: { stone: 40, iron: 5 }, w: 11, housing: 7, home: 4 },
+    apartment: { name: 'Apartment tower', tech: 'electricity', minEra: 5, cost: { stone: 60, steel: 15 }, w: 11, housing: 12, home: 5 },
+    well: { name: 'Well', tech: null, minEra: 1, cost: { stone: 10 }, w: 5 },
+    market: { name: 'Market', tech: 'pottery', minEra: 2, cost: { wood: 30, stone: 10 }, w: 11 },
+    temple: { name: 'Temple', tech: 'writing', minEra: 3, cost: { stone: 60, gold: 2 }, w: 11 },
+    stockpile: { name: 'Stockpile', tech: null, cost: {}, w: 7, auto: true },
     tower: { name: 'Watchtower', tech: 'masonry', cost: { stone: 40 }, w: 5 },
     waterwheel: { name: 'Water wheel', tech: 'waterwheel', cost: { wood: 40, stone: 10 }, w: 9 },
     barracks: { name: 'Barracks', tech: 'military', cost: { wood: 40, stone: 20 }, w: 13 },
@@ -110,11 +117,21 @@
     spire: { name: 'Alien spire', tech: null, cost: {}, w: 5, alien: true },
   };
 
+  // the best kind of home for each age
+  const HOME_BY_ERA = ['hut', 'hut', 'cottage', 'house', 'townhouse', 'apartment', 'apartment', 'apartment'];
+  const OUTSKIRTS = new Set(['farm', 'pen', 'mine', 'derrick', 'windmill', 'factory', 'launchpad', 'barracks', 'castle', 'dish']);
+  const CORE = 65; // half-width of the town core kept for homes and civic buildings
+  const HOMES = new Set(['hut', 'cottage', 'house', 'townhouse', 'apartment']);
+
   const HUNTABLE = new Set(['deer', 'rabbit', 'hare', 'boar', 'bison', 'elk', 'moose', 'reindeer', 'goat', 'ibex', 'gazelle', 'zebra', 'wildebeest', 'warthog', 'capybara', 'turkey', 'grouse', 'muskox', 'yak', 'sheep', 'cow', 'pig', 'chicken', 'goatfarm', 'duck', 'goose', 'mammoth', 'snowhare', 'javelina', 'bighorn', 'kangaroo', 'tapir', 'camel']);
   const FISH = new Set(['smallfish', 'trout', 'salmon', 'minnow', 'cod', 'bass', 'sardine', 'mackerel', 'catfish', 'carp', 'koi', 'tuna']);
   const ORES = { copper: [M.COPPER, 'mining'], tin: [M.TIN, 'mining'], coal: [M.COAL, 'coal'], iron: [M.IRON, 'iron'], gold: [M.GOLD, 'iron'],
     he3: [M.HELIUM3, 'rocketry'], rareearth: [M.RAREEARTH, 'rocketry'], sulfur: [M.SULFUR, 'rocketry'], platinum: [M.PLATINUM, 'rocketry'], deuterium: [M.ICE, 'rocketry'], crystal: [M.CRYSTAL, 'rocketry'], aether: [M.AETHER, 'rocketry'] };
   const ROCK = new Set([M.STONE, M.SANDSTONE, M.BASALT, M.MASONRY, M.MOONROCK, M.MARSROCK]);
+  // built materials villagers never dig through
+  const HARD = new Set([M.CONCRETE, M.METAL, M.GLASS, M.BRICK, M.MASONRY, M.LAMP, M.BANNER]);
+  // building materials people walk in front of
+  const WALK = new Set([M.CONCRETE, M.METAL, M.GLASS, M.BRICK, M.MASONRY, M.LAMP, M.BANNER, M.ROOF]);
   const TRUNK = new Set([M.WOOD, M.BIRCH, M.BAMBOO, M.CACTUS, M.XENOWOOD]);
   const SOFT = new Set([M.DIRT, M.SOIL, M.SAND, M.GRASS, M.SNOW, M.MUD, M.DRYGRASS, M.ASH, M.TILLED, M.RUBBLE, M.REGOLITH, M.MARSDUST, M.ALIENSOIL, M.ALIENMOSS]);
 
@@ -128,24 +145,93 @@
   }
   for (const id of ['zombie', 'vampire']) if (S[id]) { S[id].prey = S[id].prey.concat(['villager']); S[id].preySet = new Set(S[id].prey); }
   DS.finalizeSpecies();
+  const ORE_SET = new Set(Object.values(ORES).map((o) => o[0]));
   let THREATS = new Set();
   const refreshThreats = () => { THREATS = new Set(Object.keys(S).filter((id) => S[id].preySet && (S[id].preySet.has('villager') || S[id].preySet.has('soldier')) && !S[id].civ)); };
   refreshThreats();
 
   // ------------------------------------------------------------------ buildings
-  function template(type, col) {
+  function template(type, col, era = 0) {
     const out = [];
     const rect = (x0, y0, w, h, mat, sh) => { for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) out.push([x0 + x, y0 - y, mat, sh]); };
     const roof = (x0, y0, w, mat) => { for (let r = 0; w - r * 2 > 0; r++) for (let x = r; x < w - r; x++) out.push([x0 + x, y0 - r, mat, 0]); };
     switch (type) {
       case 'center':
-        rect(4, 0, 1, 9, M.WOOD, 1);
-        rect(5, -6, 3, 2, M.BANNER, col);
-        rect(1, 0, 1, 1, M.STONE, 1); rect(7, 0, 1, 1, M.STONE, 1);
+        if (era <= 0) {
+          // a totem with the tribe's banner
+          rect(4, 0, 1, 9, M.WOOD, 1);
+          rect(5, -6, 3, 2, M.BANNER, col);
+          rect(1, 0, 1, 1, M.MASONRY, 1); rect(7, 0, 1, 1, M.MASONRY, 1);
+        } else if (era <= 2) {
+          // village green: a stone well under a little roof and a flag pole
+          rect(1, 0, 5, 2, M.MASONRY, 1); rect(2, -1, 3, 1, M.WATER, 0);
+          rect(1, -2, 1, 4, M.WOOD, 2); rect(5, -2, 1, 4, M.WOOD, 2); roof(0, -6, 7, M.THATCH);
+          rect(8, 0, 1, 12, M.WOOD, 1); rect(9, -8, 3, 2, M.BANNER, col);
+        } else if (era === 3) {
+          // town hall
+          rect(0, 0, 9, 8, M.STONEBRICK, 0); rect(3, 0, 3, 4, M.WOOD, 2);
+          for (const x of [1, 6]) rect(x, -4, 2, 2, M.GLASS, 0);
+          roof(-1, -8, 11, M.ROOF);
+          rect(4, -13, 1, 3, M.WOOD, 1); rect(5, -15, 2, 2, M.BANNER, col);
+        } else if (era === 4) {
+          // town hall with a clock tower
+          rect(0, 0, 9, 9, M.BRICK, 0); rect(3, 0, 3, 4, M.WOOD, 2);
+          for (const x of [1, 6]) rect(x, -5, 2, 2, M.GLASS, 0);
+          rect(2, -9, 5, 10, M.BRICK, 1); out.push([4, -15, M.LAMP, 0], [3, -15, M.GLASS, 0], [5, -15, M.GLASS, 0]);
+          roof(2, -19, 5, M.ROOF); rect(4, -22, 1, 2, M.METAL, 2); out.push([5, -23, M.BANNER, col]);
+        } else {
+          // city hall skyscraper
+          rect(0, 0, 9, 34, M.CONCRETE, 0);
+          for (let y = -2; y > -33; y -= 3) for (let x = 1; x < 8; x += 2) rect(x, y, 1, 2, M.GLASS, 0);
+          rect(3, 0, 3, 3, M.GLASS, 0);
+          rect(4, -34, 1, 5, M.METAL, 2); out.push([4, -39, M.LAMP, 0]);
+          rect(5, -37, 2, 2, M.BANNER, col);
+        }
         break;
-      case 'campfire': out.push([1, 0, M.STONE, 1], [3, 0, M.STONE, 1], [2, 0, M.ASH, 0]); break;
+      case 'well':
+        rect(0, 0, 5, 2, M.MASONRY, 1); rect(1, -1, 3, 1, M.WATER, 0);
+        rect(0, -2, 1, 3, M.WOOD, 2); rect(4, -2, 1, 3, M.WOOD, 2); rect(0, -5, 5, 1, M.PLANK, 0); out.push([2, -4, M.METAL, 2]);
+        break;
+      case 'market':
+        for (const x0 of [0, 6]) {
+          rect(x0, 0, 5, 1, M.PLANK, 0); rect(x0, -1, 1, 4, M.WOOD, 2); rect(x0 + 4, -1, 1, 4, M.WOOD, 2);
+          for (let x = 0; x < 5; x++) out.push([x0 + x, -5, M.BANNER, (x + col) % 4]);
+          out.push([x0 + 1, -1, M.BERRY, 0], [x0 + 2, -1, M.WHEAT, 2], [x0 + 3, -1, M.FUNGUS, 0]);
+        }
+        break;
+      case 'temple':
+        rect(0, 0, 11, 1, M.MASONRY, 1);
+        for (const x of [1, 3, 7, 9]) rect(x, -1, 1, 7, M.STONEBRICK, 2);
+        rect(0, -8, 11, 1, M.MASONRY, 1); roof(0, -9, 11, M.STONEBRICK);
+        rect(5, -14, 1, 3, M.BANNER, 1);
+        rect(4, -1, 3, 4, M.WOOD, 2);
+        break;
+      case 'stockpile':
+        break;
+      case 'campfire': out.push([1, 0, M.MASONRY, 1], [3, 0, M.MASONRY, 1], [2, 0, M.ASH, 0]); break;
       case 'hut':
-        for (let y = 0; y < 6; y++) { const hw = Math.round(4.5 * Math.sqrt(1 - (y / 6) ** 2)); for (let x = 4 - hw; x <= 4 + hw; x++) if (!(y < 3 && x === 4)) out.push([x, -y, M.THATCH, (x + y) & 1]); }
+        for (let y = 0; y < 6; y++) { const hw = Math.round(4.5 * Math.sqrt(1 - (y / 6) ** 2)); for (let x = 5 - hw; x <= 5 + hw; x++) if (!(y < 3 && x === 5)) out.push([x, -y, M.THATCH, (x + y) & 1]); }
+        break;
+      case 'cottage':
+        rect(1, 0, 9, 6, M.PLANK, 0);
+        rect(2, 0, 2, 3, M.WOOD, 2);
+        rect(6, -2, 2, 2, M.GLASS, 0);
+        roof(0, -6, 11, M.THATCH);
+        rect(8, -8, 1, 3, M.MASONRY, 1);
+        break;
+      case 'townhouse':
+        rect(0, 0, 11, 15, M.BRICK, 0);
+        rect(1, 0, 2, 4, M.WOOD, 2);
+        for (const y of [-2, -6, -10]) for (const x of [5, 8]) rect(x, y, 2, 2, M.GLASS, 0);
+        for (const y of [-6, -10]) rect(1, y, 2, 2, M.GLASS, 0);
+        rect(-1, -15, 13, 1, M.MASONRY, 1); roof(0, -16, 11, M.ROOF);
+        rect(8, -19, 1, 3, M.BRICK, 1);
+        break;
+      case 'apartment':
+        rect(0, 0, 11, 26, M.CONCRETE, 0);
+        for (let y = -2; y > -25; y -= 3) for (const x of [1, 4, 7]) rect(x, y, 2, 2, M.GLASS, 0);
+        rect(4, 0, 3, 3, M.GLASS, 0);
+        rect(0, -26, 11, 1, M.METAL, 2); out.push([2, -27, M.METAL, 2], [8, -28, M.LAMP, 0], [8, -27, M.METAL, 2]);
         break;
       case 'farm':
         rect(0, 1, 16, 1, M.TILLED, 0);
@@ -172,10 +258,11 @@
         rect(2, -1, 2, 6, M.STONEBRICK, 3); rect(7, -1, 2, 6, M.STONEBRICK, 3);
         break;
       case 'house':
-        rect(0, 0, 12, 7, M.STONEBRICK, 0);
+        rect(0, 0, 11, 7, M.STONEBRICK, 0);
         rect(2, 0, 2, 4, M.WOOD, 2);
-        for (const x of [6, 9]) rect(x, -3, 2, 2, M.GLASS, 0);
-        roof(-1, -7, 14, M.ROOF);
+        for (const x of [5, 8]) rect(x, -3, 2, 2, M.GLASS, 0);
+        roof(-1, -7, 13, M.ROOF);
+        rect(8, -10, 1, 3, M.MASONRY, 1);
         break;
       case 'tower':
         rect(0, 0, 5, 14, M.MASONRY, 0);
@@ -285,7 +372,7 @@
     get offworld() { return this.planet !== 'earth'; }
     get kinds() { return this.species || { worker: 'villager', soldier: 'soldier' }; }
     has(t) { return this.techs.has(t); }
-    get housing() { return 8 + this.buildings.reduce((s, b) => s + (b.done && BUILDINGS[b.type].housing || 0), 0); }
+    get housing() { return 8 + this.buildings.reduce((s, b) => s + (b.done ? BUILDINGS[b.type].housing || 0 : b.old ? b.old.housing : 0), 0); }
     built(type) { return this.buildings.filter((b) => b.type === type).length; }
     hasBuilt(type) { return this.buildings.some((b) => b.type === type && b.done); }
     gatherMult() {
@@ -302,7 +389,7 @@
       return m;
     }
     foodMult() { return this.gatherMult() * (this.has('fire') ? 1.2 : 1) * (this.hasBuilt('windmill') ? 1.3 : 1) * (this.has('combustion') ? 1.25 : 1); }
-    researchMult() { return (this.hasBuilt('library') ? 1.5 : 1) * (this.has('astronomy') ? 1.5 : 1) * (this.has('computers') ? 1.5 : 1) * (this.hasBuilt('dish') ? 1.25 : 1) * (this.has('aetherics') ? 1.5 : 1); }
+    researchMult() { return (this.hasBuilt('temple') ? 1.15 : 1) * (this.hasBuilt('library') ? 1.5 : 1) * (this.has('astronomy') ? 1.5 : 1) * (this.has('computers') ? 1.5 : 1) * (this.hasBuilt('dish') ? 1.25 : 1) * (this.has('aetherics') ? 1.5 : 1); }
     speedMult() { return (this.has('wheel') ? 1.2 : 1) * (this.has('railways') ? 1.3 : 1) * (this.has('combustion') ? 1.2 : 1); }
     strength(c) {
       let s = 1 + this.era * 0.6;
@@ -342,7 +429,7 @@
       if (!col) return;
       if (c.job === 'mine' || c.job === 'quarry') {
         let res = null;
-        for (const k in ORES) if (ORES[k][0] === t) res = k;
+        for (const k in ORES) if (ORES[k][0] === t && col.has(ORES[k][1])) res = k;
         if (!res && ROCK.has(t) && col.has('tools')) res = 'stone';
         if (res && !c.load) {
           if (c.job === 'mine' && res === 'stone') { col.res.stone += 0.25; return; }
@@ -352,11 +439,198 @@
         }
       }
     },
+    // ------------------------------------------------------------ movement
+    // Terraria-style: walk along the surface, hop small steps, climb walls,
+    // swim across water, and dig person-sized tunnels (which takes time).
+    move(c, eco, mul) {
+      const W = eco.world;
+      c.x = Math.round(c.x); c.y = Math.round(c.y);
+      if (c.digT > 0) { c.digT--; if (c.digT <= 0) Brain.finishDig(c, eco); return; }
+      if (W.isLiquid(c.x, c.y) && W.isLiquid(c.x, c.y - 1)) { c.y--; return; } // swim up
+      // underground, people follow their path on ladders and ropes; elsewhere gravity applies
+      const onPath = c.path && c.path.length;
+      if (!onPath && !c.climbing && !Brain.supported(W, c.x, c.y)) { c.y++; return; }
+      if (!mul) return;
+      c.mv = (c.mv || 0) + c.sp.speed * mul * (c.speedMul || 1) * (W.isLiquid(c.x, c.y) ? 0.5 : 1);
+      for (let n = 0; c.mv >= 1 && n < 3; n++) {
+        c.mv -= 1;
+        if (Brain.step(c, eco)) { c.mv = 0; break; }
+      }
+    },
+
+    // something to hold on to when climbing a cliff face
+    wallNear(W, x, y) {
+      for (const [dx, dy] of [[-1, 0], [1, 0], [-1, -1], [1, -1], [0, -1]]) { const t = W.get(x + dx, y + dy); if (MP.solid[t] && !WALK.has(t)) return true; }
+      return false;
+    },
+
+    // ground height for people: buildings are walked through, not over
+    gy(W, x) {
+      x = U.clamp(x | 0, 0, W.w - 1);
+      let y = W.groundY(x);
+      while (y < W.h - 1 && WALK.has(W.get(x, y))) {
+        y++;
+        while (y < W.h - 1 && (WALK.has(W.get(x, y)) || (!MP.solid[W.get(x, y)] && !W.isLiquid(x, y)))) y++;
+      }
+      return y;
+    },
+
+    supported(W, x, y) {
+      if (y >= W.h - 2) return true;
+      const b = W.get(x, y + 1);
+      return (MP.solid[b] === 1 && !WALK.has(b)) || W.isLiquid(x, y + 1) || W.isLiquid(x, y);
+    },
+
+    passable(W, x, y) {
+      const t = W.get(x, y);
+      return W.inb(x, y) && (!MP.solid[t] || WALK.has(t)) && t !== M.BEDROCK;
+    },
+
+    // is (x, y) out in the open, standing on the surface?
+    atSurface(W, x, y) { return y <= Brain.gy(W, x) + 1; },
+
+    // one cell of progress; returns true when it should stop for this tick
+    step(c, eco) {
+      const W = eco.world, x = c.x, y = c.y, tx = c.tx, ty = c.ty;
+      if (tx == null) return true;
+      c.climbing = false;
+      const solidT = MP.solid[W.get(tx, ty)] === 1 && !WALK.has(W.get(tx, ty));
+      const ax = Math.abs(tx - x), ay = Math.abs(ty - y);
+      if (solidT ? ax <= 1 && ay <= 1 : ax <= 1 && ay <= 3) { c.arrived = true; c.path = null; return true; }
+      // following a dug or planned route
+      if (c.path && c.path.length) return Brain.follow(c, eco);
+      const deep = ty > Brain.gy(W, tx) + 1;
+      const under = !Brain.atSurface(W, x, y);
+      if ((deep && ax <= 24) || under) {
+        c.path = Brain.findPath(c, W, deep && ax <= 24 ? [tx, ty] : null);
+        if (!c.path) { c.bumps = (c.bumps || 0) + 4; return true; }
+        return Brain.follow(c, eco);
+      }
+      // walk the surface
+      const dir = Math.sign(tx - x);
+      const nx = x + dir;
+      if (nx < 1 || nx > W.w - 2) { c.bumps = (c.bumps || 0) + 1; return true; }
+      if (ax <= 1) {
+        // the target is overhead: climb a cliff if there is one, otherwise wait underneath
+        if (ty < y && Brain.passable(W, x, y - 1) && Brain.wallNear(W, x, y)) { c.y--; c.climbing = true; return false; }
+        c.arrived = true; return true;
+      }
+      c.dir = dir;
+      const g = Brain.gy(W, nx);
+      const ny = W.isLiquid(nx, g) ? g : g - 1;
+      const dy = ny - y;
+      if (Brain.hazard(W, nx, ny) || Brain.hazard(W, nx + dir, ny)) { c.bumps = (c.bumps || 0) + 6; return true; }
+      if (dy > 3) {
+        // a narrow hole (a mine shaft): hop over it rather than fall in
+        for (const k of [2, 3]) {
+          const fx = x + dir * k;
+          if (fx < 1 || fx > W.w - 2) break;
+          const fy = Brain.gy(W, fx) - 1;
+          if (Math.abs(fy - y) <= 2) { c.x = fx; c.y = fy; return false; }
+        }
+      }
+      if (dy >= -1) { c.x = nx; if (dy <= 1) c.y = ny; return false; } // walk (or step off and drop)
+      if (dy >= -4) { c.x = nx; c.y = ny; return false; } // hop up
+      if (Brain.passable(W, x, y - 1)) { c.y--; c.climbing = true; return false; } // climb the cliff face
+      c.path = Brain.findPath(c, W, [nx, ny]); // dig a way up
+      if (!c.path) { c.bumps = (c.bumps || 0) + 4; return true; }
+      return false;
+    },
+
+    follow(c, eco) {
+      const W = eco.world;
+      const [nx, ny] = c.path[0];
+      if (Math.abs(nx - c.x) > 1 || Math.abs(ny - c.y) > 1) { c.path = null; return false; } // knocked off course
+      const cost = Brain.digCost(c, W, nx, ny);
+      if (cost === Infinity || Brain.hazard(W, nx, ny)) { c.path = null; c.bumps = (c.bumps || 0) + 3; return true; }
+      if (nx !== c.x) c.dir = Math.sign(nx - c.x);
+      if (cost > 0) { c.digT = cost; c.digAt = [nx, ny]; return true; }
+      c.x = nx; c.y = ny; c.climbing = true;
+      c.path.shift();
+      return false;
+    },
+
+    // cheapest route through the ground: open tunnels cost little, digging costs more.
+    // goal = [x, y] to reach (next to it), or null = the nearest way out to the surface
+    findPath(c, W, goal) {
+      const sx = c.x, sy = c.y;
+      const gx = goal ? goal[0] : sx;
+      const x0 = Math.max(1, Math.min(sx, gx) - 22), x1 = Math.min(W.w - 2, Math.max(sx, gx) + 22);
+      const top = Math.min(sy, goal ? goal[1] : sy, Brain.gy(W, sx), goal ? Brain.gy(W, gx) : sy);
+      const y0 = Math.max(3, top - 6), y1 = Math.min(W.h - 2, Math.max(sy, goal ? goal[1] : sy) + 8);
+      const bw = x1 - x0 + 1, bh = y1 - y0 + 1, N = bw * bh;
+      if (N > 60000 || sx < x0 || sx > x1 || sy < y0 || sy > y1) return null;
+      const dist = new Float32Array(N).fill(Infinity), prev = new Int32Array(N).fill(-1);
+      const heap = [];
+      const push = (d, i) => { heap.push([d, i]); let k = heap.length - 1; while (k > 0) { const p = (k - 1) >> 1; if (heap[p][0] <= heap[k][0]) break; [heap[p], heap[k]] = [heap[k], heap[p]]; k = p; } };
+      const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let k = 0; for (;;) { const l = 2 * k + 1, r = l + 1; let m = k; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === k) break; [heap[m], heap[k]] = [heap[k], heap[m]]; k = m; } } return top; };
+      const si = (sy - y0) * bw + (sx - x0);
+      // A*: estimated remaining distance keeps the search pointed at the goal
+      const h = goal ? (x, y) => Math.max(Math.abs(x - goal[0]), Math.abs(y - goal[1])) : (x, y) => Math.max(0, y - Brain.gy(W, x));
+      dist[si] = 0; push(h(sx, sy), si);
+      let found = -1, n = 0;
+      while (heap.length && n < 6000) {
+        const [f, i] = pop();
+        const x0i = i % bw, y0i = (i / bw) | 0;
+        if (f - h(x0 + x0i, y0 + y0i) > dist[i] + 1e-6) continue;
+        n++;
+        const d = dist[i];
+        const x = x0 + (i % bw), y = y0 + ((i / bw) | 0);
+        if (goal ? Math.abs(x - goal[0]) <= 1 && Math.abs(y - goal[1]) <= 1 : i !== si && Brain.atSurface(W, x, y)) { found = i; break; }
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue;
+          const nx = x + dx, ny = y + dy;
+          if (nx < x0 || nx > x1 || ny < y0 || ny > y1) continue;
+          const cost = Brain.digCost(c, W, nx, ny);
+          if (cost === Infinity) continue;
+          const nd = d + (dx && dy ? 1.4 : 1) + (cost ? 6 + cost * 2 : 0) + (dy < 0 ? 0.3 : 0);
+          const ni = (ny - y0) * bw + (nx - x0);
+          if (nd < dist[ni]) { dist[ni] = nd; prev[ni] = i; push(nd + h(nx, ny), ni); }
+        }
+      }
+      if (found < 0) return null;
+      const path = [];
+      for (let i = found; i !== si && i >= 0; i = prev[i]) path.push([x0 + (i % bw), y0 + ((i / bw) | 0)]);
+      return path.reverse();
+    },
+
+    digCost(c, W, x, y) {
+      let cost = 0;
+      for (let k = 0; k < 3; k++) {
+        const t = W.get(x, y - k);
+        if (!MP.solid[t] || WALK.has(t)) continue;
+        if (t === M.BEDROCK || HARD.has(t)) return Infinity;
+        if (SOFT.has(t) || MP.dig[t]) cost += 3;
+        else if (t === M.ROAD) cost += 8;
+        else if (ROCK.has(t) || t === M.ICE) { if (!c.colony || !c.colony.has('tools')) return Infinity; cost += 9; }
+        else {
+          let ore = false;
+          for (const k2 in ORES) if (ORES[k2][0] === t) ore = true;
+          if (!ore) return Infinity;
+          cost += 12;
+        }
+      }
+      return cost && Math.max(2, Math.round(cost / (c.colony ? Math.sqrt(c.colony.gatherMult()) : 1)));
+    },
+
+    finishDig(c, eco) {
+      const W = eco.world;
+      const [x, y] = c.digAt;
+      for (let k = 0; k < 3; k++) {
+        const t = W.get(x, y - k);
+        if (!MP.solid[t] || t === M.BEDROCK || HARD.has(t) || WALK.has(t)) continue;
+        W.set(x, y - k, M.EMPTY);
+        if (k === 0 || ORE_SET.has(t)) Brain.dug(c, eco, t);
+      }
+      if (Math.random() < 0.4) eco.fx.burst(x, y - 1, ['#8a7a6a', '#6a5a4a'], 3, 0.4);
+    },
+
     goHome(c) {
       const col = c.colony;
+      c.path = null;
       c.phase = 'return';
       c.tx = col.x + U.randInt(-3, 3);
-      c.ty = col.civ.world.groundY(c.tx) - 1;
+      c.ty = Brain.gy(col.civ.world, c.tx) - 1;
       c.arrived = false;
       c.goalT = 0;
       c.goal = 'wander';
@@ -368,9 +642,12 @@
       if (!col || !col.alive) { c.die(eco, 'lost', true); return; }
       c.goal = 'wander';
       // flee from wild animals and monsters
-      if (!c.sp.soldier) {
+      if (!c.sp.soldier && c.order !== 'attack') {
         const p = eco.nearest(c, 22, (o) => THREATS.has(o.sp.id) && !o.sleep || (o.sp.soldier && o.colony && o.colony !== col));
-        if (p) { c.phase = 'flee'; c.tx = col.x; c.ty = W.groundY(col.x) - 1; c.load = c.load || null; c.goalT = 0; return; }
+        let fire = false;
+        for (let dx = -4; dx <= 4 && !fire; dx += 2) fire = Brain.hazard(W, Math.round(c.x) + dx, Math.round(c.y));
+        if (fire && c.phase !== 'flee') { c.phase = 'flee'; c.tx = U.clamp(Math.round(c.x + (Math.random() < 0.5 ? -30 : 30)), 3, W.w - 4); c.ty = Brain.gy(W, c.tx) - 1; c.arrived = false; c.goalT = 0; c.indoors = false; return; }
+        if (p) { c.phase = 'flee'; c.tx = U.clamp(Math.round(c.x + (c.x >= p.x ? 35 : -35)), 3, W.w - 4); c.ty = Brain.gy(W, c.tx) - 1; c.load = c.load || null; c.goalT = 0; c.arrived = false; c.indoors = false; return; }
         if (c.phase === 'flee') c.phase = null;
       }
       if (c.sp.soldier) return Brain.soldier(c, eco);
@@ -378,7 +655,15 @@
       if (c.phase === 'work' && c.arrived) return; // waiting at a site (handled in after)
       if (c.load) { Brain.goHome(c); return; }
       // night: go home
-      if (eco.daylight < 0.15 && Math.abs(c.x - col.x) > 12) { c.job = 'rest'; c.phase = 'go'; c.tx = col.x + U.randInt(-8, 8); c.ty = W.groundY(c.tx) - 1; c.arrived = false; c.goalT = 0; return; }
+      if (eco.daylight < 0.1 && !c.order && c.job !== 'rest' && col.civ.t - (c.wokeT || -1e9) > 7200) {
+        // bedtime: head home (a house if there is one) and sleep indoors
+        const homes = col.buildings.filter((b) => b.done && (HOMES.has(b.type) || b.type === 'dome' || b.type === 'pod'));
+        const h = homes.length ? homes[(c.id || 0) % homes.length] : null;
+        c.job = 'rest'; c.phase = 'go'; c.bed = h;
+        c.tx = h ? h.x + 2 + U.randInt(0, BUILDINGS[h.type].w - 5) : col.x + U.randInt(-8, 8);
+        c.ty = Brain.gy(W, c.tx) - 1; c.arrived = false; c.goalT = 0; c.bumps = 0;
+        return;
+      }
       Brain.pickJob(c, eco);
     },
 
@@ -396,25 +681,31 @@
       if (col.has('tools')) opts.push(['quarry', w.stone * (col.res.stone < 30 ? 1.3 : 0.8) * (need.stone || 1)]);
       if (col.has('mining') && col.hasBuilt('mine')) opts.push(['mine', w.mining * 1.5 * ore]);
       if (col.buildings.some((b) => !b.done)) opts.push(['build', w.build * 2]);
-      const job = U.weighted(opts.filter((o) => o[1] > 0));
-      c.job = job;
       c.phase = 'go';
       c.arrived = false;
       c.goalT = 0;
       c.waitT = 0;
       c.bumps = 0;
+      // a standing order from the god's flag comes first
+      if (c.order) {
+        const m = col.markers[c.order];
+        if (m && m.t > 0 && Brain.ordered(c, eco, m)) return;
+        if (!m || m.t <= 0) c.order = null;
+      }
+      const job = U.weighted(opts.filter((o) => o[1] > 0));
+      c.job = job;
       const mk = (type) => col.markers[type] && col.markers[type].t > 0 ? col.markers[type] : null;
-      const near = (type) => mk(type) || { x: col.x, y: W.groundY(col.x) };
+      const near = (type) => mk(type) || { x: col.x, y: Brain.gy(W, col.x) };
       const R = 70 + col.era * 25;
       switch (job) {
         case 'food': {
           // farms first, then pens' animals, berries, hunting, fishing
           const farm = col.buildings.find((b) => b.type === 'farm' && b.done && b.ripe);
-          if (farm) { c.job = 'farm'; c.site = farm; return Brain.to(c, farm.x + U.randInt(1, 14), farm.g - 1); }
+          if (farm) { c.job = 'farm'; c.site = farm; return Brain.toSurf(c, W, farm.x + U.randInt(1, 14)); }
           const r = Math.random();
           if (col.has('hunting') && r < 0.45) {
             const m = near('hunt');
-            const prey = eco.nearest({ x: m.x, cy: m.y, sp: {} }, R, (o) => HUNTABLE.has(o.sp.id) && !o.home && o.sp.hab !== 'water' && !o.dead);
+            const prey = eco.nearest({ x: m.x, cy: m.y, sp: {} }, R, (o) => HUNTABLE.has(o.sp.id) && !o.home && o.sp.hab !== 'water' && o.sp.hab !== 'air' && !o.dead);
             if (prey) { c.job = 'hunt'; c.target = prey; return Brain.to(c, prey.x, prey.y); }
           }
           if (col.has('domestication') && r < 0.6) {
@@ -427,13 +718,13 @@
           }
           const b = Brain.findCell(W, near('gather').x, R, (t) => t === M.BERRY || t === M.FUNGUS || t === M.FLOWER && Math.random() < 0.1);
           if (b) { c.job = 'berries'; return Brain.to(c, b[0], b[1]); }
-          const prey = eco.nearest({ x: col.x, cy: W.groundY(col.x), sp: {} }, R, (o) => (o.sp.id === 'rabbit' || o.sp.id === 'chicken' || o.sp.id === 'mouse' || o.sp.id === 'hare') && !o.dead);
+          const prey = eco.nearest({ x: col.x, cy: Brain.gy(W, col.x), sp: {} }, R, (o) => (o.sp.id === 'rabbit' || o.sp.id === 'chicken' || o.sp.id === 'mouse' || o.sp.id === 'hare') && !o.dead);
           if (prey) { c.job = 'hunt'; c.target = prey; return Brain.to(c, prey.x, prey.y); }
           // forage roots, nuts and herbs on open ground
           c.job = 'forage';
           let fx = col.x;
           for (let k = 0; k < 8; k++) { const xx = U.clamp(Math.round(near('gather').x + U.rand(-R * 0.6, R * 0.6)), 2, W.w - 3); if (Brain.safe(W, xx)) { fx = xx; break; } }
-          return Brain.to(c, fx, W.groundY(fx) - 1);
+          return Brain.to(c, fx, Brain.gy(W, fx) - 1);
         }
         case 'wood': return Brain.pickWood(c, eco, near('gather'), R);
         case 'quarry': {
@@ -441,24 +732,73 @@
           const s = Brain.findCell(W, m.x, R, (t) => ROCK.has(t) && t !== M.MASONRY, true);
           if (s) return Brain.to(c, s[0], s[1]);
           // dig down near the town
-          return Brain.to(c, col.x + U.randInt(-30, 30), W.floorY(col.x) + U.randInt(6, 14));
+          { const x = Brain.digSite(col, W); return Brain.to(c, x, W.floorY(x) + U.randInt(6, 14)); }
         }
         case 'mine': {
           const target = Brain.pickOre(col, eco);
           if (target) return Brain.to(c, target[0], target[1]);
           c.job = 'quarry';
-          return Brain.to(c, col.x + U.randInt(-25, 25), W.floorY(col.x) + U.randInt(8, 20));
+          { const x = Brain.digSite(col, W); return Brain.to(c, x, W.floorY(x) + U.randInt(8, 20)); }
         }
         case 'build': {
           const site = col.buildings.find((b) => !b.done);
           c.site = site;
-          return Brain.to(c, site.x + U.randInt(0, BUILDINGS[site.type].w - 1), site.g - 1);
+          return Brain.toSurf(c, W, site.x + U.randInt(0, BUILDINGS[site.type].w - 1));
         }
         case 'research': {
           const lib = col.buildings.find((b) => b.type === 'library' && b.done) || col.buildings.find((b) => b.type === 'center');
-          return Brain.to(c, (lib ? lib.x + 2 : col.x) + U.randInt(0, 5), (lib ? lib.g : W.groundY(col.x)) - 1);
+          return Brain.toSurf(c, W, (lib ? lib.x + 2 : col.x) + U.randInt(0, 5));
         }
       }
+    },
+
+    // carry out a flag order; returns false if there is nothing to do there
+    ordered(c, eco, m) {
+      const col = c.colony, W = eco.world;
+      const R = 45;
+      switch (c.order) {
+        case 'gather': {
+          const t = Brain.findTree(W, m.x, R, col.civ);
+          if (t) { c.job = 'wood'; Brain.to(c, t[0], t[1]); return true; }
+          const b = Brain.findCell(W, m.x, R, (q) => q === M.BERRY || q === M.FUNGUS || q === M.FLOWER || q === M.XENOBULB);
+          if (b) { c.job = 'berries'; Brain.to(c, b[0], b[1]); return true; }
+          c.job = 'brush'; Brain.to(c, m.x + U.randInt(-10, 10), Brain.gy(W, m.x) - 1); return true;
+        }
+        case 'hunt': {
+          const prey = eco.nearest({ x: m.x, cy: m.y, sp: {} }, R + 20, (o) => HUNTABLE.has(o.sp.id) && !o.home && o.sp.hab !== 'water' && o.sp.hab !== 'air' && !o.dead);
+          if (prey) { c.job = 'hunt'; c.target = prey; Brain.to(c, prey.x, prey.y); return true; }
+          const spot = Brain.findWaterEdge(W, m.x, R);
+          if (spot) { c.job = 'fish'; Brain.to(c, spot[0], spot[1]); return true; }
+          c.job = 'forage'; Brain.to(c, m.x + U.randInt(-10, 10), Brain.gy(W, m.x) - 1); return true;
+        }
+        case 'mine': {
+          // the nearest ore or rock to the flag, dug out with a tunnel if needed
+          let best = null, bd = 1e9;
+          for (let k = 0; k < 120; k++) {
+            const x = Math.round(m.x + U.rand(-25, 25)), y = Math.round(m.y + U.rand(-20, 25));
+            const t = W.get(x, y);
+            const ok = (ORE_SET.has(t) && [...Object.values(ORES)].some((o) => o[0] === t && col.has(o[1]))) || (ROCK.has(t) && t !== M.MASONRY && col.has('tools'));
+            if (!ok) continue;
+            const d = Math.abs(x - m.x) + Math.abs(y - m.y) * 1.2 - (ORE_SET.has(t) ? 15 : 0);
+            if (d < bd) { bd = d; best = [x, y]; }
+          }
+          c.job = col.has('mining') ? 'mine' : 'quarry';
+          if (best) Brain.to(c, best[0], best[1]);
+          else Brain.to(c, m.x, Math.max(m.y, Brain.gy(W, m.x) + 6));
+          return true;
+        }
+        case 'build': {
+          const site = col.buildings.find((b) => !b.done);
+          if (site) { c.job = 'build'; c.site = site; Brain.toSurf(c, W, site.x + U.randInt(0, BUILDINGS[site.type].w - 1)); return true; }
+          return false;
+        }
+        case 'attack': {
+          const foe = eco.nearest({ x: m.x, cy: m.y, sp: {} }, 60, (o) => (o.sp.civ && o.colony && o.colony !== col && o.colony.alive) || THREATS.has(o.sp.id));
+          if (foe) { c.job = 'fight'; c.target = foe; Brain.to(c, foe.x, foe.y); return true; }
+          c.job = 'rally'; Brain.to(c, m.x + U.randInt(-5, 5), Brain.gy(W, m.x) - 1); return true;
+        }
+      }
+      return false;
     },
 
     pickWood(c, eco, m, R) {
@@ -469,7 +809,53 @@
       c.job = 'brush';
       let x = c.colony.x;
       for (let k = 0; k < 8; k++) { const xx = U.clamp(Math.round(m.x + U.rand(-R, R)), 2, W.w - 3); if (Brain.safe(W, xx)) { x = xx; break; } }
-      return Brain.to(c, x, W.groundY(x) - 1);
+      return Brain.to(c, x, Brain.gy(W, x) - 1);
+    },
+
+    toSurf(c, W, x) { x = U.clamp(Math.round(x), 2, W.w - 3); return Brain.to(c, x, Brain.gy(W, x) - 1); },
+
+    // somewhere to dig down outside the built-up core (never through roads and floors)
+    // everyone digs down the same quarry shaft (or the mine's), so the land isn't riddled with holes
+    digSite(col, W) {
+      const mine = col.buildings.find((b) => b.type === 'mine' && b.done);
+      if (mine) return mine.x + 3;
+      if (col.quarryX == null || !Brain.safe(W, col.quarryX)) {
+        col.quarryX = col.x + CORE + 10;
+        for (let k = 0; k < 12; k++) {
+          const x = U.clamp(Math.round(col.x + (k % 2 ? -1 : 1) * (CORE + 10 + k * 6)), 3, W.w - 4);
+          if (Brain.safe(W, x) && !Brain.built(col.civ, x) && Brain.pathSafe(W, col.x, x)) { col.quarryX = x; break; }
+        }
+      }
+      return col.quarryX;
+    },
+
+    // no lava, vents, fire or poison anywhere near a building plot
+    siteSafe(W, x0, bw) {
+      for (let x = x0 - 12; x < x0 + bw + 12; x += 2) {
+        const g = Brain.gy(W, x);
+        for (let y = g - 18; y < g + 8; y += 2) {
+          const t = W.get(x, y);
+          if (t === M.LAVA || t === M.VENT || t === M.FIRE || t === M.TOXIC || t === M.ACID || t === M.EMBERS) return false;
+        }
+      }
+      return true;
+    },
+
+    // can people walk there from town without crossing lava, fire or poison?
+    pathSafe(W, a, b) {
+      const s = Math.sign(b - a) || 1;
+      for (let x = a; x !== b; x += s * 2) {
+        if ((x - b) * s > 0) break;
+        const g = Brain.gy(W, x);
+        for (let dy = -2; dy <= 1; dy++) { const t = W.get(x, g + dy); if (t === M.LAVA || t === M.FIRE || t === M.TOXIC || t === M.ACID) return false; }
+      }
+      return true;
+    },
+
+    // fire, lava or poison just ahead?
+    hazard(W, x, y) {
+      for (let dy = -3; dy <= 1; dy++) { const t = W.get(x, y + dy); if (t === M.FIRE || t === M.LAVA || t === M.TOXIC || t === M.ACID) return true; }
+      return false;
     },
 
     to(c, x, y) {
@@ -477,6 +863,9 @@
       c.ty = Math.round(y);
       c.arrived = false;
       c.goalT = 0;
+      c.bumps = 0;
+      c.indoors = false;
+      c.path = null;
     },
 
     // nearest standing trunk, scanning outward; skips anything built by a colony
@@ -495,7 +884,7 @@
     // no toxic pools, lava or deep water underfoot nearby
     safe(W, x) {
       for (let dx = -4; dx <= 4; dx += 2) {
-        const xx = U.clamp(x + dx, 0, W.w - 1), g = W.groundY(xx), t = W.get(xx, g);
+        const xx = U.clamp(x + dx, 0, W.w - 1), g = Brain.gy(W, xx), t = W.get(xx, g);
         if (t === M.TOXIC || t === M.LAVA || t === M.FIRE || t === M.ACID || (W.isLiquid(xx, g) && (dx === 0 || W.isLiquid(xx, g + 2)))) return false;
       }
       return true;
@@ -524,10 +913,10 @@
     findWaterEdge(W, cx, R) {
       for (let k = 0; k < 40; k++) {
         const x = U.clamp(Math.round(cx + U.rand(-R, R)), 3, W.w - 4);
-        const g = W.groundY(x);
+        const g = Brain.gy(W, x);
         if (!W.isLiquid(x, g)) continue;
         for (const d of [-1, 1]) for (let s = 1; s < 8; s++) {
-          const nx = x + d * s, ng = W.groundY(nx);
+          const nx = x + d * s, ng = Brain.gy(W, nx);
           if (!W.isLiquid(nx, ng) && Math.abs(ng - g) < 4) return [nx, ng - 1];
         }
       }
@@ -551,12 +940,13 @@
       // dig for what is scarcest
       kinds.sort((a, b) => col.res[a] - col.res[b]);
       const k = Math.random() < 0.6 ? kinds[0] : U.pick(kinds);
-      const m = col.markers.mine && col.markers.mine.t > 0 ? col.markers.mine : { x: col.x, y: W.floorY(col.x) };
+      const mineB = col.buildings.find((b) => b.type === 'mine' && b.done);
+      const m = col.markers.mine && col.markers.mine.t > 0 ? col.markers.mine : mineB ? { x: mineB.x + 3, y: W.floorY(mineB.x + 3) } : { x: col.x, y: W.floorY(col.x) };
       let best = null, bd = 1e9;
       for (let i = 0; i < 30; i++) {
         const p = U.pick(col.ore[k]);
         if (W.get(p[0], p[1]) !== ORES[k][0]) continue;
-        const d = Math.abs(p[0] - m.x) + Math.abs(p[1] - m.y) * 1.5;
+        const d = Math.abs(p[0] - m.x) * 2 + Math.abs(p[1] - m.y) * 0.5;
         if (d < bd) { bd = d; best = p; }
       }
       return best;
@@ -567,10 +957,14 @@
       const enemy = eco.nearest(c, c.sp.sense, (o) => (o.sp.civ && o.colony && o.colony !== col && o.colony.alive) || (THREATS.has(o.sp.id) && Math.abs(o.x - col.x) < 90));
       if (enemy) { c.job = 'fight'; c.target = enemy; return Brain.to(c, enemy.x, enemy.y); }
       c.target = null;
-      if (col.raid && col.raid.alive) { c.job = 'raid'; return Brain.to(c, col.raid.x + U.randInt(-6, 6), W.groundY(col.raid.x) - 1); }
+      if (col.raid && col.raid.alive) { c.job = 'raid'; return Brain.to(c, col.raid.x + U.randInt(-6, 6), Brain.gy(W, col.raid.x) - 1); }
       const m = col.markers.attack && col.markers.attack.t > 0 ? col.markers.attack : null;
-      if (m) { c.job = 'rally'; return Brain.to(c, m.x + U.randInt(-5, 5), m.y); }
-      if (c.arrived || c.goalT > 900 || c.job !== 'patrol') { c.job = 'patrol'; const x = col.x + U.randInt(-60, 60); Brain.to(c, x, W.groundY(U.clamp(x, 0, W.w - 1)) - 1); }
+      if (m) {
+        const foe = eco.nearest({ x: m.x, cy: m.y, sp: {} }, 70, (o) => (o.sp.civ && o.colony && o.colony !== col && o.colony.alive) || THREATS.has(o.sp.id));
+        if (foe) { c.job = 'fight'; c.target = foe; return Brain.to(c, foe.x, foe.y); }
+        c.job = 'rally'; return Brain.to(c, m.x + U.randInt(-5, 5), Brain.gy(W, m.x) - 1);
+      }
+      if (c.arrived || c.goalT > 900 || c.job !== 'patrol') { c.job = 'patrol'; const x = col.x + U.randInt(-60, 60); Brain.to(c, x, Brain.gy(W, U.clamp(x, 0, W.w - 1)) - 1); }
     },
 
     after(c, eco) {
@@ -592,8 +986,8 @@
         }
         return;
       }
-      if (Math.hypot(c.tx - c.x, c.ty - c.y) > 1.8) {
-        if (c.goalT > 1500) { c.phase = null; c.job = null; c.thinkT = 0; }
+      if (!c.arrived && Math.hypot(c.tx - c.x, c.ty - c.y) > 1.8) {
+        if (c.goalT > 1500 || (c.bumps || 0) > 40) { c.phase = null; c.job = null; c.thinkT = 0; c.bumps = 0; }
         return;
       }
       c.arrived = true;
@@ -641,6 +1035,7 @@
           if (!c.load) { c.phase = null; c.thinkT = 0; }
           return;
         }
+        case 'rally': c.phase = null; c.thinkT = 60; return;
         case 'fish': case 'farm': case 'research': case 'build': case 'rest': case 'forage': case 'brush': {
           c.phase = 'work';
           c.waitT = (c.waitT || 0) + 1;
@@ -654,7 +1049,10 @@
             if (!b || b.done) { c.phase = null; c.thinkT = 0; return; }
             col.civ.progress(col, b, 1);
             eco.fx.add(c.x + c.dir * 2, c.y - 3, U.rand(-0.3, 0.3), -0.4, '#d8c8a0', 10, 0.05);
-          } else if (c.job === 'rest' && (c.waitT > 600 || eco.daylight > 0.25)) { c.phase = null; c.thinkT = 0; }
+          } else if (c.job === 'rest') {
+            c.indoors = !!c.bed && c.bed.done;
+            if (eco.daylight > 0.2 || c.waitT > 1800) { c.phase = null; c.thinkT = 0; c.indoors = false; c.bed = null; c.job = null; c.wokeT = col.civ.t; }
+          }
           return;
         }
       }
@@ -687,6 +1085,11 @@
   };
 
   // ------------------------------------------------------------------ manager
+  const FIRST = ['Ada', 'Bram', 'Cora', 'Dirk', 'Edda', 'Finn', 'Greta', 'Hugo', 'Ines', 'Jory', 'Kara', 'Lars', 'Mira', 'Nils', 'Olga', 'Pim', 'Quin', 'Rosa', 'Sven', 'Tess', 'Ulf', 'Vera', 'Wim', 'Xena', 'Yara', 'Zeb', 'Anouk', 'Bas', 'Lotte', 'Joris', 'Femke', 'Ruben', 'Sanne', 'Thijs', 'Noor', 'Daan', 'Elin', 'Otto', 'Ida', 'Milo'];
+  const JOB_TEXT = { wood: 'chopping wood', berries: 'picking berries', forage: 'foraging', brush: 'gathering brushwood', hunt: 'hunting', fish: 'fishing', farm: 'harvesting the fields', quarry: 'quarrying stone', mine: 'mining', build: 'building', research: 'studying', rest: 'resting at home', fight: 'fighting', rally: 'answering the call', raid: 'raiding', patrol: 'on patrol', food: 'looking for food' };
+  const ROLE = { wood: 'Woodcutter', berries: 'Gatherer', forage: 'Gatherer', brush: 'Gatherer', hunt: 'Hunter', fish: 'Fisher', farm: 'Farmer', quarry: 'Quarrier', mine: 'Miner', build: 'Builder', research: 'Scholar', fight: 'Militia', rally: 'Militia', raid: 'Raider', patrol: 'Guard' };
+  const MARK_COL = { gather: '#5ac850', hunt: '#e0a040', mine: '#a0a0b0', build: '#e8d060', attack: '#e04040' };
+  const MARK_ICON = { gather: '🌳', hunt: '🦌', mine: '⛏️', build: '🔨', attack: '⚔️' };
   const NAMES = ['Oakhaven', 'Stonebrook', 'Ashford', 'Riverend', 'Highmoor', 'Emberfall', 'Wolfden', 'Saltmarsh', 'Goldcrest', 'Thornwick', 'Mistvale', 'Redcliff'];
 
   class Civ {
@@ -734,14 +1137,14 @@
           const z = zoneList[Math.floor(rng() * zoneList.length)];
           const x = Math.round(z.x0 + 40 + rng() * Math.max(1, z.x1 - z.x0 - 80));
           const g = W.floorY(x);
-          if (W.isLiquid(x, W.groundY(x)) || g > W.h * 0.47) continue;
+          if (W.isLiquid(x, Brain.gy(W, x)) || g > W.h * 0.47) continue;
           if (avoid.some((s) => Math.abs(s - x) < W.w / (n + 1.5))) continue;
           found++;
           const sc = score(x);
           if (sc > bs) { bs = sc; best = x; }
         }
         if (best != null) return best;
-        for (let k = 0; k < 400; k++) { const x = Math.round(rng() * (W.w - 40)) + 20; if (!W.isLiquid(x, W.groundY(x)) && !avoid.some((s) => Math.abs(s - x) < 80)) return x; }
+        for (let k = 0; k < 400; k++) { const x = Math.round(rng() * (W.w - 40)) + 20; if (!W.isLiquid(x, Brain.gy(W, x)) && !avoid.some((s) => Math.abs(s - x) < 80)) return x; }
         return Math.round(rng() * W.w);
       };
       const zones = land.length ? land : W.zones;
@@ -755,7 +1158,7 @@
       }
       const p = this.player;
       this.app.cam.x = p.x;
-      this.app.cam.y = W.groundY(p.x) - this.app.screenH * 0.25;
+      this.app.cam.y = Brain.gy(W, p.x) - this.app.screenH * 0.25;
       this.app.clampCam();
       this.app.toast(`🏛️ ${p.name} is founded!`);
     }
@@ -767,6 +1170,7 @@
       this.colonies.push(col);
       const b = this.placeBuilding(col, 'center', x);
       if (b) this.progress(col, b, 1e9);
+      if (!col.species) { const sp = this.placeBuilding(col, 'stockpile'); if (sp) this.progress(col, sp, 1e9); }
       for (let i = 0; i < (extra && extra.people || 6); i++) this.spawnVillager(col);
       return col;
     }
@@ -774,7 +1178,7 @@
     spawnVillager(col, x) {
       const W = this.world;
       x = x == null ? col.x + U.randInt(-6, 6) : x;
-      const c = this.eco.spawn(col.kinds.worker, x, W.groundY(U.clamp(x, 0, W.w - 1)) - 1, {});
+      const c = this.eco.spawn(col.kinds.worker, x, Brain.gy(W, U.clamp(x, 0, W.w - 1)) - 1, {});
       if (!c) return null;
       this.dress(c, col);
       return c;
@@ -782,6 +1186,7 @@
 
     dress(c, col) {
       c.colony = col;
+      if (!c.cname) c.cname = U.pick(FIRST);
       c.age = 0;
       c.speedMul = col.speedMult();
       if (col.species) return; // aliens wear their own colours
@@ -797,10 +1202,10 @@
     }
 
     // find a flat-ish site near the town and level it
-    placeBuilding(col, type, at) {
+    placeBuilding(col, type, at, keep) {
       const W = this.world;
       const bw = BUILDINGS[type].w;
-      const taken = (x) => col.buildings.some((b) => x < b.x + BUILDINGS[b.type].w + 3 && x + bw + 3 > b.x) || this.colonies.some((o) => o !== col && o.planet === col.planet && Math.abs(o.x - x) < 40);
+      const taken = (x) => (col.badSpots || []).some((bx) => Math.abs(bx - x) < 12) || col.buildings.some((b) => x < b.x + BUILDINGS[b.type].w + 3 && x + bw + 3 > b.x) || this.colonies.some((o) => o !== col && o.planet === col.planet && Math.abs(o.x - x) < 40);
       let x = null;
       if (at != null) x = at - Math.floor(bw / 2);
       else if (type === 'waterwheel') {
@@ -808,14 +1213,19 @@
         if (!s) return null;
         x = s[0] - Math.floor(bw / 2);
       } else {
-        const m = col.markers.build && col.markers.build.t > 0 ? col.markers.build.x : col.x;
-        for (let k = 0; k < 60 && x == null; k++) {
-          const d = (6 + k * 4) * (k % 2 ? 1 : -1);
+        const flag = col.markers.build && col.markers.build.t > 0;
+        const m = flag ? col.markers.build.x : col.x;
+        // zoning: homes and civic buildings in the core, fields and industry outside it
+        const outer = OUTSKIRTS.has(type) && !flag;
+        const start = outer ? CORE + 4 : 6;
+        for (let k = 0; k < 90 && x == null; k++) {
+          const d = (start + k * 4) * (k % 2 ? 1 : -1);
+          if (!outer && !flag && Math.abs(d) > CORE && k < 60 && !col.offworld) { k = Math.max(k, 59); continue; }
           const cx = Math.round(m + d);
           if (cx < 5 || cx + bw > W.w - 5 || taken(cx)) continue;
           let wet = false;
-          for (let i = 0; i < bw; i++) if (W.isLiquid(cx + i, W.groundY(cx + i))) wet = true;
-          if (!wet) x = cx;
+          for (let i = 0; i < bw; i++) if (W.isLiquid(cx + i, Brain.gy(W, cx + i))) wet = true;
+          if (!wet && Brain.siteSafe(W, cx, bw) && Brain.pathSafe(W, col.x, cx)) x = cx;
         }
       }
       if (x == null) return null;
@@ -823,15 +1233,15 @@
       const hs = [];
       for (let i = 0; i < bw; i++) hs.push(W.floorY(x + i));
       hs.sort((a, b) => a - b);
-      const g = hs[Math.floor(hs.length / 2)];
+      const g = typeof keep === 'number' ? keep : hs[Math.floor(hs.length / 2)];
       for (let i = -1; i <= bw; i++) {
         const px = x + i;
         const f = W.floorY(px);
-        for (let y = Math.min(f, g - 30); y < g; y++) { const t = W.get(px, y); if (t !== M.EMPTY && MP.kind[t] !== DS.KIND.liquid) W.set(px, y, M.EMPTY); }
+        if (!keep) for (let y = Math.min(f, g - 30); y < g; y++) { const t = W.get(px, y); if (t !== M.EMPTY && MP.kind[t] !== DS.KIND.liquid) W.set(px, y, M.EMPTY); }
         for (let y = g; y < f; y++) W.set(px, y, y === g ? M.GRASS : M.SOIL);
       }
-      const cells = template(type, col.color);
-      const b = { type, x, g, cells, placed: 0, progress: 0, cost: Math.max(4, cells.length / 6), done: false, grow: 0, ripe: false, t: 0 };
+      const cells = template(type, col.color, col.era);
+      const b = { type, x, g, cells, placed: 0, progress: 0, progT: col.t, cost: Math.max(4, cells.length / 6), done: false, grow: 0, ripe: false, t: 0 };
       if (type === 'farm') b.crops = cells.filter((c) => c[2] === M.WHEAT).map(([dx, dy]) => [x + dx, g - 1 + dy]);
       col.buildings.push(b);
       return b;
@@ -840,15 +1250,23 @@
     progress(col, b, amt) {
       const W = this.world;
       b.progress += amt;
+      b.progT = col.t;
       const want = Math.min(b.cells.length, Math.ceil((b.progress / b.cost) * b.cells.length));
       for (; b.placed < want; b.placed++) {
         const [dx, dy, mat, sh] = b.cells[b.placed];
-        W.set(b.x + dx, b.g - 1 + dy, mat, 0, sh);
+        W.set(b.x + dx, b.g - 1 + dy, mat, mat === M.GLASS && (col.era >= 2 || col.has('electricity')) && !['greenhouse', 'dome'].includes(b.type) ? 1 : 0, sh);
       }
       if (b.placed >= b.cells.length && !b.done) {
         b.done = true;
+        if (b.old) {
+          // clear what is left of the old building
+          const keepSet = new Set(b.cells.map(([dx, dy]) => (b.x + dx) + ',' + (b.g - 1 + dy)));
+          for (const [dx, dy, mat] of b.old.cells) { const x = b.old.x + dx, y = b.old.g - 1 + dy; if (!keepSet.has(x + ',' + y) && W.get(x, y) === mat) W.set(x, y, M.EMPTY); }
+          b.old = null;
+        }
         if (col.isPlayer && b.type !== 'center') this.app.toast(`🔨 ${BUILDINGS[b.type].name} built`);
         if (b.type === 'pen') this.stockPen(col, b);
+        this.pave(col);
       }
     }
 
@@ -862,10 +1280,61 @@
       void W;
     }
 
+    // ------------------------------------------------------------ the town grows
+    homes(col) { return col.buildings.filter((b) => HOMES.has(b.type)); }
+    maxHomes(col) { return 4 + col.era * 2; }
+
+    // roads between the buildings: dirt paths, then cobbles, then asphalt
+    pave(col) {
+      if (col.species || col.planet !== this.planet || col.era < 1) return;
+      const W = this.world;
+      const xs = col.buildings.filter((b) => b.done && !['farm', 'pen', 'mine', 'waterwheel', 'launchpad'].includes(b.type));
+      if (!xs.length) return;
+      const x0 = Math.min(...xs.map((b) => b.x)) - 2, x1 = Math.max(...xs.map((b) => b.x + BUILDINGS[b.type].w)) + 2;
+      const shade = col.era >= 4 ? 2 : col.era >= 2 ? 1 : 0;
+      for (let x = Math.max(1, x0); x < Math.min(W.w - 1, x1); x++) {
+        const y = W.floorY(x);
+        const t = W.get(x, y);
+        if (W.isLiquid(x, y - 1)) continue;
+        if (t === M.ROAD || SOFT.has(t) || t === M.STONE || t === M.SANDSTONE) W.set(x, y, M.ROAD, 0, shade);
+      }
+    }
+
+    // swap a building for a newer kind in the same spot (new style, same plot)
+    // (the old building stays up and keeps its beds until the new one is finished)
+    rebuild(col, b, type) {
+      col.buildings.splice(col.buildings.indexOf(b), 1);
+      const nb = this.placeBuilding(col, type, b.x + Math.floor(BUILDINGS[type].w / 2), b.g);
+      if (!nb) { col.buildings.push(b); return null; }
+      nb.old = { x: b.x, g: b.g, cells: b.cells, housing: b.done ? BUILDINGS[b.type].housing || 0 : 0 };
+      return nb;
+    }
+
+    // a new age: the town hall changes, and old homes get rebuilt one by one
+    renew(col) {
+      if (col.planet !== this.planet) return;
+      const c = col.buildings.find((b) => b.type === 'center');
+      if (c && !col.species) { const nb = this.rebuild(col, c, 'center'); if (nb) this.progress(col, nb, 1e9); }
+      this.pave(col);
+    }
+
+    upgradeHomes(col) {
+      const best = HOME_BY_ERA[col.era];
+      const B = BUILDINGS[best];
+      if (!col.has(B.tech) || col.buildings.some((b) => !b.done)) return false;
+      const old = this.homes(col).filter((b) => b.done && BUILDINGS[b.type].home < B.home).sort((a, b) => BUILDINGS[a.type].home - BUILDINGS[b.type].home)[0];
+      if (!old || !col.canAfford(B.cost)) return false;
+      col.pay(B.cost);
+      const nb = this.rebuild(col, old, best);
+      if (col.isPlayer && nb && col.planet === this.planet && Math.random() < 0.3) this.app.toast(`🏗️ ${col.name} is rebuilding a home as a ${B.name.toLowerCase()}`);
+      return !!nb;
+    }
+
     queue(col, type) {
       const B = BUILDINGS[type];
       if (B.tech && !col.has(B.tech)) return false;
       if (B.offworld && !col.offworld) return false;
+      if (B.minEra && col.era < B.minEra) return false;
       if (!col.canAfford(B.cost)) return false;
       const b = this.placeBuilding(col, type);
       if (!b) return false;
@@ -886,6 +1355,7 @@
       for (const col of this.colonies) if (col.alive && !col.species && !emps.has(col.emp)) { emps.add(col.emp); if (!col.emp.home.alive) col.emp.home = col; this.researchTick(col.emp.home); }
       if (this.t % 60 === 0) for (const col of this.colonies) if (col.alive && col.planet !== this.planet) this.abstractTick(col);
       this.updateMissions();
+      this.storyteller();
       this.updateRockets();
       for (const col of here) {
         if (!col.alive) continue;
@@ -905,7 +1375,7 @@
       const t = col.t;
       if (col.oreT > 0) col.oreT--;
       // growth
-      if (t % 600 === 0 && col.res.food >= 12 + col.pop * 2 && col.pop < col.housing && eco.list.length < eco.cap) {
+      if (t % 600 === 0 && col.res.food >= 12 + col.pop * 2 && col.pop < col.housing && eco.list.length < 1400) {
         col.res.food -= 12;
         const c = this.spawnVillager(col);
         if (c) eco.fx.glyph(c.x, c.y - 10, 'heart', '#ff8aa8');
@@ -926,17 +1396,21 @@
       }
       // the town's fires and noise keep most wild beasts at bay
       if (t % 20 === 0) {
-        const R = 45 + col.era * 12;
+        // the guarded area covers the whole town, fields included
+        let x0 = col.x - 45 - col.era * 12, x1 = col.x + 45 + col.era * 12;
+        for (const b of col.buildings) { x0 = Math.min(x0, b.x - 25); x1 = Math.max(x1, b.x + BUILDINGS[b.type].w + 25); }
+        const folk = eco.list.filter((c) => c.colony === col && !c.dead && !c.indoors);
         for (const o of eco.list) {
-          if (o.dead || o.sp.civ || !THREATS.has(o.sp.id) || Math.abs(o.x - col.x) > R || Math.random() < 0.25) continue;
-          // a beast in the middle of town gets mobbed by the townsfolk
-          if (Math.abs(o.x - col.x) < 16 && col.pop >= 4 && Math.random() < 0.12 + col.era * 0.03) {
+          if (o.dead || o.sp.civ || !THREATS.has(o.sp.id) || o.x < x0 || o.x > x1 || Math.random() < 0.25) continue;
+          // a beast in town gets mobbed by whoever is around
+          const near = folk.filter((c) => Math.abs(c.x - o.x) < 10 && Math.abs(c.y - o.y) < 10).length;
+          if ((near >= 2 || Math.abs(o.x - col.x) < 16) && col.pop >= 4 && Math.random() < 0.1 + near * 0.08 + col.era * 0.03) {
             eco.fx.burst(o.x, o.cy, ['#ffffff', '#d8d8d8', '#ffd040'], 10, 0.8);
             if (col.isPlayer && col.planet === this.planet) this.app.toast(`🔥 The people of ${col.name} drove off a ${o.sp.name}!`);
             eco.kill(o, null);
             continue;
           }
-          const away = Math.sign(o.x - col.x) || 1;
+          const away = o.x < col.x ? -1 : 1;
           o.goal = 'flee'; o.goalT = 0; o.target = null; o.threat = { dead: false, x: col.x, y: o.y };
           o.dir = away; o.tx = o.x + away * 70;
         }
@@ -962,6 +1436,18 @@
         if (col.has('steel') && col.res.iron >= 1 && col.res.coal >= 1) { col.res.iron--; col.res.coal--; col.res.steel += 2; }
       }
       // building
+      // a building site nobody can reach (flooded, burnt, cut off) is abandoned and refunded
+      if (t % 300 === 0) for (const b of col.buildings) {
+        if (b.done || b.old || b.type === 'center' || t - (b.progT || 0) < 60 * 75) continue;
+        const W2 = this.world;
+        for (let i = 0; i < b.placed; i++) { const [dx, dy, mat] = b.cells[i]; if (W2.get(b.x + dx, b.g - 1 + dy) === mat) W2.set(b.x + dx, b.g - 1 + dy, M.EMPTY); }
+        for (const [k, v] of Object.entries(BUILDINGS[b.type].cost)) col.res[k] = (col.res[k] || 0) + v;
+        col.buildings.splice(col.buildings.indexOf(b), 1);
+        (col.badSpots = col.badSpots || []).push(b.x);
+        if (col.isPlayer && col.planet === this.planet) this.app.toast(`🚧 The ${BUILDINGS[b.type].name.toLowerCase()} site was abandoned; the builders will try elsewhere.`);
+        break;
+      }
+      if (t % 900 === 450 && (col.ai || col.autoBuild) && !col.species && !col.offworld) this.upgradeHomes(col);
       if (t % 300 === 0 && (col.ai || col.autoBuild) && !col.buildings.some((b) => !b.done)) {
         const want = this.wantBuilding(col);
         // don't spend what the current research is waiting for, unless people need roofs
@@ -1012,6 +1498,66 @@
       }
     }
 
+    // ------------------------------------------------------------ storyteller
+    // RimWorld-style little events for the player's town in view
+    storyteller() {
+      const col = this.local;
+      if (!col || !col.alive || col.planet !== this.planet || col.pop < 3) return;
+      if (this.storyT == null) this.storyT = 60 * 60 * U.rand(3, 5);
+      if (--this.storyT > 0) return;
+      this.storyT = 60 * 60 * U.rand(3, 6);
+      const eco = this.eco, W = this.world, app = this.app;
+      const evs = [['wanderer', 3], ['traders', col.era >= 1 ? 3 : 0], ['harvest', col.hasBuilt('farm') ? 2 : 0], ['festival', 2], ['wolves', this.opts.difficulty !== 'peaceful' && !col.offworld ? 1.5 : 0], ['blight', col.built('farm') > 1 ? 1 : 0], ['inspiration', 2]];
+      switch (U.weighted(evs.filter((e) => e[1] > 0))) {
+        case 'wanderer': {
+          const side = Math.random() < 0.5 ? -1 : 1;
+          const x = U.clamp(col.x + side * 120, 3, W.w - 4);
+          const c = this.spawnVillager(col, x);
+          if (c) { c.tx = col.x; c.ty = Brain.gy(W, col.x) - 1; app.toast(`🧳 A wanderer named ${c.cname} asks to join ${col.name}.`); }
+          break;
+        }
+        case 'traders': {
+          // swap some of what we have most of for what we lack most
+          const keys = Object.keys(col.res).filter((k) => !['food'].includes(k));
+          const rich = keys.sort((a, b) => col.res[b] - col.res[a])[0];
+          const wants = new Set(); for (const cost of [col.research && TECHS[col.research].cost, col.wanted && BUILDINGS[col.wanted].cost]) for (const k in cost || {}) if (col.res[k] < cost[k]) wants.add(k);
+          const need = [...wants][0] || ['copper', 'tin', 'iron', 'stone', 'wood'].find((k) => col.res[k] < 20) || 'food';
+          const give = Math.min(40, Math.floor(col.res[rich] * 0.3));
+          if (give < 5 || rich === need) { app.toast(`🐫 A trader caravan passes ${col.name} by.`); break; }
+          col.res[rich] -= give; col.res[need] = (col.res[need] || 0) + Math.ceil(give * 0.7);
+          app.toast(`🐫 Traders visit ${col.name}: ${give} ${rich} traded for ${Math.ceil(give * 0.7)} ${need}.`);
+          break;
+        }
+        case 'harvest':
+          for (const b of col.buildings) if (b.type === 'farm' && b.done) { b.ripe = true; Brain.setCrop(W, b, 2); }
+          app.toast(`🌾 A bumper crop! The fields of ${col.name} are ready early.`);
+          break;
+        case 'festival':
+          col.knowledge += 10 + col.pop * 2;
+          for (const c of eco.list) if (c.colony === col && Math.random() < 0.5) eco.fx.glyph(c.x, c.y - 10, 'heart', '#ff8aa8');
+          app.toast(`🎉 ${col.name} holds a festival. Spirits (and ideas) are high.`);
+          break;
+        case 'inspiration':
+          col.knowledge += 20 + col.era * 25;
+          app.toast(`💡 A scholar of ${col.name} has a flash of inspiration!`);
+          break;
+        case 'blight': {
+          const f = col.buildings.find((b) => b.type === 'farm' && b.done);
+          if (f) { f.ripe = false; f.grow = 0; Brain.setCrop(W, f, 0); }
+          app.toast(`🥀 Blight! A field of ${col.name} has withered.`);
+          break;
+        }
+        case 'wolves': {
+          const side = Math.random() < 0.5 ? -1 : 1;
+          const id = ['wolf', 'bear', 'boar'].find((k) => S[k]) || null;
+          if (!id) break;
+          for (let i = 0; i < (id === 'wolf' ? 3 : 1); i++) { const x = U.clamp(col.x + side * (90 + i * 4), 3, W.w - 4); eco.spawn(id, x, Brain.gy(W, x) - 1); }
+          app.toast(`🐺 ${id === 'wolf' ? 'A wolf pack' : 'A wild ' + S[id].name.toLowerCase()} is prowling near ${col.name}!`);
+          break;
+        }
+      }
+    }
+
     // a town on another planet keeps working while nobody watches
     abstractTick(col) {
       if (col.species || !col.isPlayer) return;
@@ -1050,6 +1596,7 @@
         col.era++;
         this.app.toast(col.isPlayer ? `${ERAS[col.era].icon} ${col.name} enters the ${ERAS[col.era].name}!` : `${ERAS[col.era].icon} ${col.name} has reached the ${ERAS[col.era].name}`);
         for (const c of this.eco.list) if (c.colony && c.colony.emp === col.emp && c.sp.civ) this.dress(c, c.colony);
+        for (const o of this.colonies) if (o.emp === col.emp && o.alive) this.renew(o);
       }
       for (const tier in TIERS) if (col.isPlayer && TIERS[tier].techs.includes(id) && this.tierOpen(+tier, col)) {
         const names = DS.Space.BODIES.filter((b) => b.tier === +tier).map((b) => b.name).join(', ');
@@ -1088,8 +1635,15 @@
       if (col.has('rocketry') && !col.built('launchpad')) list.push('launchpad');
       if (col.has('satellites') && !col.built('dish')) list.push('dish');
       if (col.has('fire') && !col.built('campfire')) list.push('campfire');
-      if (pop >= col.housing - 2) list.push(col.has('masonry') ? 'house' : col.has('huts') ? 'hut' : null);
-      if (col.has('agriculture') && col.built('farm') < 1 + Math.floor(pop / 6)) list.push('farm');
+      if (pop >= col.housing - 2 && this.homes(col).length < this.maxHomes(col)) {
+        let best = null;
+        for (let e = col.era; e >= 0 && !best; e--) { const h = HOME_BY_ERA[e]; if (col.has(BUILDINGS[h].tech) && (BUILDINGS[h].minEra || 0) <= col.era) best = h; }
+        list.push(best);
+      }
+      if (col.era >= 1 && !col.built('well')) list.push('well');
+      if (col.has('pottery') && col.era >= 2 && col.built('market') < 1 + Math.floor(pop / 30)) list.push('market');
+      if (col.has('writing') && col.era >= 3 && !col.built('temple')) list.push('temple');
+      if (col.has('agriculture') && col.built('farm') < 1 + Math.floor(pop / 10)) list.push('farm');
       if (col.has('domestication') && col.built('pen') < 1 + Math.floor(pop / 18)) list.push('pen');
       if (col.has('mining') && col.built('mine') < 1) list.push('mine');
       if (col.has('bronze') && !col.built('smithy')) list.push('smithy');
@@ -1123,18 +1677,53 @@
             lights.push(fx, fy, 4);
           }
           if (b.type === 'center' && dark > 0.3) lights.push(b.x + 4, b.g - 4, 9);
+          if (b.type === 'stockpile') this.drawStock(ctx, col, b);
           if (b.type === 'launchpad' && !(b.launchT > 0)) this.drawRocket(ctx, b.x + 6, b.g - 2, lights, false);
           if (b.type === 'derrick') { const k = Math.sin(t * 0.06) * 2; ctx.fillStyle = '#3a3a3a'; ctx.fillRect(b.x + 1, Math.round(b.g - 7 + k), 5, 1); }
         }
         for (const k in col.markers) {
           const m = col.markers[k];
           if (m.t <= 0) continue;
+          const wave = (t >> 4) & 1;
           ctx.fillStyle = '#ffffff';
-          ctx.fillRect(Math.round(m.x), Math.round(m.y) - 8, 1, 8);
-          ctx.fillStyle = COLORS[col.color];
-          ctx.fillRect(Math.round(m.x) + 1, Math.round(m.y) - 8, 3, 2);
+          ctx.fillRect(Math.round(m.x), Math.round(m.y) - 12, 1, 12);
+          ctx.fillStyle = MARK_COL[k] || COLORS[col.color];
+          ctx.fillRect(Math.round(m.x) + 1, Math.round(m.y) - 12 + wave, 5, 3);
+          ctx.fillRect(Math.round(m.x) + 1, Math.round(m.y) - 11 - wave, 4, 1);
         }
       }
+    }
+
+    // piles of logs, stone and sacks that grow and shrink with the stores
+    drawStock(ctx, col, b) {
+      const r = col.res, gy = b.g - 1;
+      const logs = Math.min(12, Math.floor(r.wood / 12));
+      for (let i = 0; i < logs; i++) {
+        const row = Math.floor(i / 3), k = i % 3;
+        ctx.fillStyle = (i & 1) ? '#7a5030' : '#6a4426';
+        ctx.fillRect(b.x + k, gy - row, 1, 1);
+      }
+      const stone = Math.min(10, Math.floor(r.stone / 12));
+      for (let i = 0; i < stone; i++) {
+        const row = i < 4 ? 0 : i < 7 ? 1 : i < 9 ? 2 : 3, k = i < 4 ? i : i < 7 ? i - 4 : i < 9 ? i - 7 : 0;
+        ctx.fillStyle = (i % 3) ? '#8a8a8e' : '#6e6e74';
+        ctx.fillRect(b.x + 3 + k + (row >> 1), gy - row, 1, 1);
+      }
+      const sacks = Math.min(5, Math.floor(r.food / 30));
+      for (let i = 0; i < sacks; i++) { ctx.fillStyle = i % 2 ? '#c8a860' : '#b8944a'; ctx.fillRect(b.x + i, gy - 4 - (i % 2), 1, 1); }
+      const ore = ['copper', 'tin', 'iron', 'coal', 'gold'].filter((k) => r[k] >= 5);
+      ore.forEach((k, i) => { ctx.fillStyle = { copper: '#c8703a', tin: '#d8dce4', iron: '#a8482a', coal: '#2a2a2e', gold: '#f0c030' }[k]; ctx.fillRect(b.x + 6, gy - i, 1, 1); });
+    }
+
+    // what the settlement has grown into
+    rank(col) {
+      const p = col.pop, e = col.era;
+      if (col.offworld) return p < 10 ? 'Outpost' : p < 25 ? 'Base' : 'Colony';
+      if (p >= 70 && e >= 5) return 'Metropolis';
+      if (p >= 40 && e >= 4) return 'City';
+      if (p >= 22 && e >= 2) return 'Town';
+      if (p >= 10) return 'Village';
+      return 'Camp';
     }
 
     drawRocket(ctx, x, y, lights, flying) {
@@ -1220,7 +1809,7 @@
       this.app.toast(`${B.icon} Touchdown on ${B.name}!`);
       if (m.kind === 'troops') {
         if (!out) return;
-        for (let i = 0; i < 4; i++) { const s = this.eco.spawn('soldier', out.x + U.randInt(-5, 5), this.world.groundY(out.x) - 1, {}); if (s) this.dress(s, out); }
+        for (let i = 0; i < 4; i++) { const s = this.eco.spawn('soldier', out.x + U.randInt(-5, 5), Brain.gy(this.world, out.x) - 1, {}); if (s) this.dress(s, out); }
         return;
       }
       if (out) { for (let i = 0; i < 4; i++) this.spawnVillager(out); return; }
@@ -1233,10 +1822,10 @@
       let x = null;
       for (let k = 0; k < 300 && x == null; k++) {
         const cx = Math.round(W.w * (0.1 + Math.random() * 0.8));
-        const g = W.groundY(cx);
+        const g = Brain.gy(W, cx);
         if (W.isLiquid(cx, g) || !Brain.safe(W, cx) || natives.some((o) => Math.abs(o.x - cx) < Math.min(220, W.w / 3))) continue;
         let flat = 0;
-        for (let dx = -8; dx <= 8; dx += 4) flat = Math.max(flat, Math.abs(W.groundY(cx + dx) - g));
+        for (let dx = -8; dx <= 8; dx += 4) flat = Math.max(flat, Math.abs(Brain.gy(W, cx + dx) - g));
         if (flat < 5 || k > 200) x = cx;
       }
       if (x == null) x = Math.round(W.w / 2);
@@ -1255,7 +1844,7 @@
       const kinds = DS.AlienCiv[P.natives];
       const W = this.world;
       let x = Math.round(W.w * (0.25 + rng() * 0.5));
-      for (let k = 0; k < 60; k++) { const cx = Math.round(W.w * (0.15 + rng() * 0.7)); if (!W.isLiquid(cx, W.groundY(cx)) && Brain.safe(W, cx)) { x = cx; break; } }
+      for (let k = 0; k < 60; k++) { const cx = Math.round(W.w * (0.15 + rng() * 0.7)); if (!W.isLiquid(cx, Brain.gy(W, cx)) && Brain.safe(W, cx)) { x = cx; break; } }
       const era = DS.Space.BY[id].fantasy ? 6 : 3;
       const emp = { res: Object.fromEntries(RES.map(([k]) => [k, 0])), knowledge: 0, techs: new Set(Object.keys(TECHS).filter((t) => TECHS[t].era <= Math.min(era, 4))), era, research: null, autoResearch: false };
       emp.res.food = 200; emp.res.wood = 100;
@@ -1264,7 +1853,7 @@
       col.weights = { food: 3, wood: 2, stone: 1, mining: 1, research: 0.5, build: 2, military: this.opts.difficulty === 'peaceful' ? 0 : 2 };
       for (const type of ['pod', 'pod', 'spire']) { const b = this.placeBuilding(col, type); if (b) this.progress(col, b, 1e9); }
       col.raidT = 60 * 60 * (this.opts.difficulty === 'hard' ? 2 : 4);
-      for (let i = 0; i < 3; i++) { const s = this.eco.spawn(kinds.soldier, x + U.randInt(-6, 6), W.groundY(x) - 1, {}); if (s) this.dress(s, col); }
+      for (let i = 0; i < 3; i++) { const s = this.eco.spawn(kinds.soldier, x + U.randInt(-6, 6), Brain.gy(W, x) - 1, {}); if (s) this.dress(s, col); }
     }
 
     conquered(col) {
@@ -1291,9 +1880,9 @@
       ctx.textAlign = 'center';
       for (const col of this.here()) {
         if (!col.alive) continue;
-        const sx = (col.x - v.x) * v.s, sy = (this.world.groundY(col.x) - 16 - v.y) * v.s;
+        const sx = (col.x - v.x) * v.s, sy = (Brain.gy(this.world, col.x) - 16 - v.y) * v.s;
         if (sx < -100 || sx > ctx.canvas.width + 100) continue;
-        const label = `${ERAS[col.era].icon} ${col.name} · ${col.pop}`;
+        const label = `${ERAS[col.era].icon} ${col.species ? col.name : this.rank(col) + ' of ' + col.name} · 👥 ${col.pop}`;
         ctx.fillStyle = 'rgba(0,0,0,0.55)';
         const w = ctx.measureText(label).width + 12;
         ctx.fillRect(sx - w / 2, sy - 14, w, 18);
@@ -1301,6 +1890,21 @@
         ctx.fillRect(sx - w / 2, sy - 14, 3, 18);
         ctx.fillStyle = '#ffffff';
         ctx.fillText(label, sx, sy);
+        if (!col.isPlayer) continue;
+        for (const k in col.markers) {
+          const m = col.markers[k];
+          if (m.t <= 0) continue;
+          const busy = this.eco.list.filter((c) => c.colony === col && c.order === k && !c.dead).length;
+          const mx = (m.x - v.x) * v.s, my = (m.y - 16 - v.y) * v.s;
+          ctx.font = '600 11px system-ui, sans-serif';
+          ctx.fillStyle = 'rgba(0,0,0,0.5)';
+          const txt = `${MARK_ICON[k]} ${busy}`;
+          const tw = ctx.measureText(txt).width + 8;
+          ctx.fillRect(mx - tw / 2, my - 12, tw, 15);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(txt, mx, my);
+          ctx.font = '600 12px system-ui, sans-serif';
+        }
       }
       ctx.restore();
     }
@@ -1311,7 +1915,52 @@
       if (!col || col.planet !== this.planet) return;
       if (!col) return;
       col.markers[type] = { x: Math.round(x), y: Math.round(y), t: 60 * 180 };
-      for (const c of this.eco.list) if (c.colony === col && !c.load) { c.phase = null; c.thinkT = U.randInt(0, 60); }
+      // send the nearest share of the townsfolk (soldiers for attacks)
+      const eco = this.eco;
+      let crew = eco.list.filter((c) => c.colony === col && !c.dead && (type === 'attack' ? true : !c.sp.soldier));
+      if (type === 'attack' && crew.some((c) => c.sp.soldier)) crew = crew.filter((c) => c.sp.soldier);
+      crew.sort((a, b) => Math.abs(a.x - x) - Math.abs(b.x - x));
+      const n = type === 'attack' ? crew.length : Math.max(1, Math.ceil(crew.length * (type === 'build' ? 0.5 : 0.6)));
+      for (const c of eco.list) if (c.colony === col && c.order === type) c.order = null;
+      for (const c of crew.slice(0, n)) {
+        c.order = type;
+        if (!c.load) { c.phase = null; c.job = null; c.target = null; c.thinkT = U.randInt(0, 20); }
+        eco.fx.glyph(c.x, c.y - 10, 'bang', '#ffd040');
+      }
+      col.markers[type].n = n;
+      const verb = { gather: 'to gather', hunt: 'to hunt', mine: 'to dig', build: 'to build', attack: 'to attack' }[type];
+      this.app.toast(`🚩 ${n} ${type === 'attack' && crew[0] && crew[0].sp.soldier ? 'soldiers' : 'villagers'} sent ${verb} at the flag`);
+    }
+
+    // what a villager is up to, for the tooltip
+    describe(c) {
+      const role = c.sp.soldier ? (c.colony && c.colony.has('gunpowder') ? 'Rifleman' : 'Soldier') : ROLE[c.job] || 'Villager';
+      let doing = c.phase === 'flee' ? 'running from danger!' : c.phase === 'return' && c.load ? `carrying ${Math.max(1, Math.round(c.load.amt))} ${c.load.res} home` : JOB_TEXT[c.job] || 'idling';
+      if (c.digT > 0) doing += ' (digging)';
+      if (c.order) doing += ' 🚩';
+      return `${c.cname || c.sp.name} · ${role} — ${doing}`;
+    }
+
+    buildingAt(x, y) {
+      for (const col of this.here()) for (const b of col.buildings) {
+        const B = BUILDINGS[b.type];
+        if (x < b.x - 1 || x > b.x + B.w) continue;
+        let top = 0;
+        for (const cell of b.cells) top = Math.min(top, cell[1]);
+        if (y > b.g + 1 || y < b.g - 1 + top - 2) continue;
+        let txt = `${B.name}`;
+        if (!b.done) txt += ` — under construction ${Math.floor((b.placed / Math.max(1, b.cells.length)) * 100)}%`;
+        else if (B.housing) txt += ` — home for ${B.housing}`;
+        else if (b.type === 'farm') txt += b.ripe ? ' — ready to harvest' : ' — growing';
+        else if (b.type === 'stockpile') txt += ` — ${Math.floor(col.res.wood)} wood, ${Math.floor(col.res.stone)} stone, ${Math.floor(col.res.food)} food`;
+        return `${txt} (${col.name})`;
+      }
+      return null;
+    }
+
+    clearOrders(col) {
+      col.markers = {};
+      for (const c of this.eco.list) if (c.colony === col) c.order = null;
     }
   }
 

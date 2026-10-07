@@ -265,7 +265,7 @@
         const allowed = (id) => DS.Species[id] && (!opts.allowed || opts.allowed(id));
         const fauna = (z.biome.fauna || []).filter(([id]) => allowed(id) && !DS.Species[id].ant && !DS.Species[id].hive && !DS.Species[id].lawn);
         if (opts.myth) for (const id of MYTH[z.id] || []) if (allowed(id) && DS.Species[id].cat === 'myth') fauna.push([id, rng() < 0.6 ? 1 : 0]);
-        eco.populate(fauna.filter(([, n]) => n > 0), [z.x0 + 8, z.x1 - 8], (z.x1 - z.x0) / 320);
+        eco.populate(fauna.filter(([, n]) => n > 0), [z.x0 + 8, z.x1 - 8], (z.x1 - z.x0) / 520);
       }
       return zones;
     },

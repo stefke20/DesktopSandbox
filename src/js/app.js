@@ -195,7 +195,7 @@
       const w = Math.ceil(this.screenW * (sizes[opts.size] || 5)), h = Math.ceil(this.screenH * 2.2);
       const { W, eco, rng } = this.makeWorld(w, h, DS.BiomeMap.grasslands, opts.seed);
       W.activeRanges = [];
-      eco.cap = Math.round(Math.min(700, 200 + w * 0.3));
+      eco.cap = Math.round(Math.min(380, 120 + w * 0.15));
       DS.WorldGen.build(W, eco, rng, opts);
       // start the camera somewhere on land near the middle
       let sx = Math.round(w / 2);
@@ -244,7 +244,7 @@
       const seed = ((this.worldOpts && this.worldOpts.seed) || 1) * 31 + id.length * 977 + id.charCodeAt(0);
       const { W, eco, rng } = this.makeWorld(w, h, biome, seed, true);
       W.activeRanges = [];
-      eco.cap = Math.round(Math.min(500, 150 + w * 0.25));
+      eco.cap = Math.round(Math.min(300, 100 + w * 0.15));
       biome.gen(W, rng, eco);
       eco.populate(biome.fauna || []);
       W.frame++;

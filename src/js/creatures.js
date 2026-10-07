@@ -123,7 +123,7 @@
         }
         case 'water': this.moveSwim(eco, mul); break;
         case 'air': this.moveAir(eco, mul); break;
-        case 'climb': case 'burrow': this.moveClimb(eco, mul); break;
+        case 'climb': case 'burrow': if (sp.civ) DS.CivBrain.move(this, eco, mul); else this.moveClimb(eco, mul); break;
       }
       this.moving = Math.abs(this.x - px) + Math.abs(this.y - py) > 0.01;
       if (this.dead) return;
@@ -893,7 +893,14 @@
 
     canBreed(sp) {
       const n = this.count[sp.id] || 0;
-      return n >= 2 && n < sp.max * (this.scale || 1) && this.list.length < this.cap;
+      return n >= 2 && n < sp.max * (this.scale || 1) && this.wild() < this.cap;
+    }
+
+    // wildlife only: townsfolk don't count against the cap
+    wild() {
+      let civ = 0;
+      for (const id in this.count) if (S[id] && S[id].civ) civ += this.count[id];
+      return this.list.length - civ;
     }
 
     birth(parent) {
@@ -965,7 +972,7 @@
 
     // Keep native wildlife going: animals wander in from the edges
     immigrate() {
-      if (!this.natives.length || this.list.length >= this.cap) return;
+      if (!this.natives.length || this.wild() >= this.cap * 0.85) return;
       const night = this.daylight < 0.3;
       for (const [id, n0, range, sc] of this.natives) {
         const sp = S[id];
@@ -1004,6 +1011,7 @@
       const vy0 = view ? view.y - 30 : -1e9, vy1 = view ? view.y + view.h + 30 : 1e9;
       for (const c of this.list) {
         if (c.x < vx0 || c.x > vx1 || c.y < vy0 || c.y > vy1) continue;
+        if (c.indoors) continue;
         const sp = c.sp;
         const e = DS.Sprites.get(sp, c.vkey, c.vpal);
         const n = e.frames.length;
