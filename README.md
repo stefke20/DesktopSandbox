@@ -84,6 +84,18 @@ and studying. You help them out as a god:
 | 🪐 Interplanetary | asteroid mining, robotics, fusion, terraforming |
 | ✨ Stellar | cryogenics, deep space travel, warp drive, aetherics |
 
+**Life in town (inspired by RimWorld and Terraria):**
+
+- **Moving around:** villagers walk the land, hop up steps, climb cliffs, swim and hop over mine shafts. Underground they find their way with real pathfinding: they reuse existing tunnels and dig new ones (person-sized) only where needed. Miners share one shaft per town.
+- **Names and jobs:** every villager has a name. Hover over one to see their role and what they're doing ("Sanne · Woodcutter — carrying 8 wood home"); hover over a building to see what it is.
+- **Night:** people sleep indoors in shifts, with lit windows.
+- **Events:** now and then something happens — a wanderer asks to join, traders swap goods, a bumper crop, a festival, a flash of inspiration, blight, or a wolf pack.
+- **Defence:** townsfolk mob monsters that wander into town and run *away* from danger. Building plots avoid lava, fire and poison, and a site nobody can reach is abandoned and refunded.
+
+**The town grows up with the ages:** huts become timber cottages, then stone houses, brick townhouses and finally apartment towers. Older homes are rebuilt in the new style one by one. The town hall goes from a totem to a village well, a town hall, a clock tower and a city hall skyscraper. Dirt paths turn into cobbles and then asphalt. Homes and civic buildings (well, market, temple) stay in the core, and farms, pens, mines and industry go on the outskirts. A stockpile next to the centre shows piles of logs, stone, food sacks and ore. The label above the town shows its rank: Camp, Village, Town, City or Metropolis.
+
+**Flags are orders:** when you plant a flag (gather, hunt, mine, build or attack), the nearest share of your people (or every soldier, for attacks) drop what they're doing and work there for 3 minutes. The flag shows how many are on the job.
+
 Rivals research and expand too, and once they have soldiers they send raiders
 to plunder you. Watchtowers and castles shoot at enemies. Wild predators and
 monsters prey on villagers, but campfires keep most beasts away and townsfolk
