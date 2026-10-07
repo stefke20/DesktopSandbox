@@ -503,7 +503,7 @@
       const under = !Brain.atSurface(W, x, y);
       if ((deep && ax <= 24) || under) {
         c.path = Brain.findPath(c, W, deep && ax <= 24 ? [tx, ty] : null);
-        if (!c.path) { c.bumps = (c.bumps || 0) + 4; return true; }
+        if (!c.path) { if (!Brain.lastWait) c.bumps = (c.bumps || 0) + 4; else c.bumps = (c.bumps || 0) + 0.2; return true; }
         return Brain.follow(c, eco);
       }
       // walk the surface
@@ -533,7 +533,7 @@
       if (dy >= -4) { c.x = nx; c.y = ny; return false; } // hop up
       if (Brain.passable(W, x, y - 1)) { c.y--; c.climbing = true; return false; } // climb the cliff face
       c.path = Brain.findPath(c, W, [nx, ny]); // dig a way up
-      if (!c.path) { c.bumps = (c.bumps || 0) + 4; return true; }
+      if (!c.path) { if (!Brain.lastWait) c.bumps = (c.bumps || 0) + 4; else c.bumps = (c.bumps || 0) + 0.2; return true; }
       return false;
     },
 
@@ -553,13 +553,24 @@
     // cheapest route through the ground: open tunnels cost little, digging costs more.
     // goal = [x, y] to reach (next to it), or null = the nearest way out to the surface
     findPath(c, W, goal) {
+      // searches are rationed: a few per tick for the whole world, and a pause after a failure
+      const now = c.colony ? c.colony.civ.t : 0;
+      Brain.lastWait = (c.pathWait || 0) > now || Brain.budget <= 0;
+      if (Brain.lastWait) return null;
+      Brain.budget--;
+      const r = Brain.search(c, W, goal);
+      if (!r) c.pathWait = now + 90 + U.randInt(0, 60);
+      return r;
+    },
+
+    search(c, W, goal) {
       const sx = c.x, sy = c.y;
       const gx = goal ? goal[0] : sx;
       const x0 = Math.max(1, Math.min(sx, gx) - 22), x1 = Math.min(W.w - 2, Math.max(sx, gx) + 22);
       const top = Math.min(sy, goal ? goal[1] : sy, Brain.gy(W, sx), goal ? Brain.gy(W, gx) : sy);
       const y0 = Math.max(3, top - 6), y1 = Math.min(W.h - 2, Math.max(sy, goal ? goal[1] : sy) + 8);
       const bw = x1 - x0 + 1, bh = y1 - y0 + 1, N = bw * bh;
-      if (N > 60000 || sx < x0 || sx > x1 || sy < y0 || sy > y1) return null;
+      if (N > 25000 || sx < x0 || sx > x1 || sy < y0 || sy > y1) return null;
       const dist = new Float32Array(N).fill(Infinity), prev = new Int32Array(N).fill(-1);
       const heap = [];
       const push = (d, i) => { heap.push([d, i]); let k = heap.length - 1; while (k > 0) { const p = (k - 1) >> 1; if (heap[p][0] <= heap[k][0]) break; [heap[p], heap[k]] = [heap[k], heap[p]]; k = p; } };
@@ -569,7 +580,7 @@
       const h = goal ? (x, y) => Math.max(Math.abs(x - goal[0]), Math.abs(y - goal[1])) : (x, y) => Math.max(0, y - Brain.gy(W, x));
       dist[si] = 0; push(h(sx, sy), si);
       let found = -1, n = 0;
-      while (heap.length && n < 6000) {
+      while (heap.length && n < 4000) {
         const [f, i] = pop();
         const x0i = i % bw, y0i = (i / bw) | 0;
         if (f - h(x0 + x0i, y0 + y0i) > dist[i] + 1e-6) continue;
@@ -1358,6 +1369,7 @@
     // ------------------------------------------------------------ simulation
     update() {
       this.t++;
+      Brain.budget = 4;
       const eco = this.eco, W = this.world;
       const here = this.here();
       // counts (towns on other planets keep their last census)
