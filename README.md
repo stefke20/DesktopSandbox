@@ -262,9 +262,21 @@ resets. Double-click a creature with the hand to follow it around.
 - 🕑 **Time:** jump to sunrise, noon, sunset or midnight, scrub the clock, set the day length, pause, or run at 2× or 4× speed.
 - ⚙️ **Settings:** pixel size, frame rate, info overlays, idle biome cycling, desktop mode.
 
-**Keys:** `H` hide controls · `Space` pause · `B` / `Shift+B` next/previous biome ·
-`N` day/night · `R` rain · `I` population stats · `[` `]` or `Shift`+wheel brush size ·
-`+` `-` `0` zoom · `WASD` / arrows pan · `F` stop following · `Esc` hand tool.
+**Saving:** the game autosaves every 3 minutes (change it in ⚙️ Settings). Next time, the main menu offers **▶ Continue**. Use **💾 Save / 📂 Load** in the menu or Settings for three save slots. `F5` quicksaves and `F9` loads the quicksave. Starting a new game autosaves the old one first, so nothing is lost. A save keeps everything: the terrain, every creature, your towns, research and the planets you've visited.
+
+**Handy extras:**
+- 📜 an event log of everything that popped up.
+- An always-on minimap (`M`) that you can click to jump to any spot. Towns show on it.
+- `C` jumps to your town.
+- `1`–`4` set the speed to 1×, 2×, 4× or 8×.
+- Income per minute shows next to each resource in the colony panel.
+- The game pauses while the menu or the solar system is open.
+- `?` shows every shortcut.
+
+**Keys:** `H` hide controls · `Space` pause · `1`–`4` speed · `B` / `Shift+B` next/previous biome ·
+`N` day/night · `R` rain · `I` population stats · `M` minimap · `C` go to your town · `G` colony panel ·
+`P` solar system · `L` event log · `[` `]` or `Shift`+wheel brush size · `+` `-` `0` zoom ·
+`WASD` / arrows pan · `F` stop following · `F5` quicksave · `F9` quickload · `?` all shortcuts · `Esc` hand tool.
 
 ## Project layout
 
@@ -294,6 +306,7 @@ src/js/civ.js           Colony mode: tech tree, buildings, villager AI, rivals, 
 src/js/space.js         solar system bodies and planet terrain generators
 src/js/space-life.js    alien creatures, alien plants and alien civilisations
 src/js/solar.js         the solar system overview screen
+src/js/saves.js         saving and loading (IndexedDB), autosave
 src/js/god.js           god-mode tools and UI panels
 src/js/app.js           main loop, lighting, settings, desktop bridge
 ```

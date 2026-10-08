@@ -249,7 +249,7 @@
           p.append(el('div', { class: 'row' }, el('label', {}, 'Length of a day'), daySel));
           p.append(el('h4', {}, 'Simulation speed'));
           const g2 = el('div', { class: 'grid' });
-          for (const [v, l] of [[0, '⏸ Pause'], [1, '▶ 1×'], [2, '⏩ 2×'], [4, '⏩ 4×']])
+          for (const [v, l] of [[0, '⏸ Pause'], [1, '▶ 1×'], [2, '⏩ 2×'], [4, '⏩ 4×'], [8, '⏩ 8×']])
             g2.append(el('button', { class: 'chip' + (app.speed === v ? ' active' : ''), onclick: () => { app.setSpeed(v); this.renderPanel(); } }, l));
           p.append(g2);
           break;
@@ -260,7 +260,39 @@
         case 'colony':
           this.renderColony(p);
           break;
+        case 'log':
+          this.renderLog(p);
+          break;
       }
+    }
+
+    // ------------------------------------------------------------ help
+    help() {
+      if (!this.helpEl) {
+        const keys = [
+          ['Space', 'pause / resume'], ['1 2 3 4', 'speed 1× 2× 4× 8×'], ['Mouse wheel  + −', 'zoom'], ['0', 'reset zoom'],
+          ['W A S D  arrows', 'pan'], ['Screen edges', 'scroll (see Settings)'], ['M', 'always show the minimap'], ['Click the minimap', 'jump there'],
+          ['C  Home', 'jump to your town'], ['G', 'colony panel'], ['P', 'solar system'], ['L', 'event log'],
+          ['H', 'hide all controls'], ['I', 'population stats'], ['N', 'day / night'], ['R', 'rain'],
+          ['B  Shift+B', 'next / previous biome (Sandbox)'], ['[  ]', 'brush size'], ['Double-click a creature', 'follow it'], ['F', 'stop following'],
+          ['Esc', 'hand tool / close'], ['F5', 'quicksave'], ['F9', 'load quicksave'], ['? F1', 'this help'],
+        ];
+        this.helpEl = el('div', { id: 'help', class: 'hidden', onclick: (e) => { if (e.target === this.helpEl) this.helpEl.classList.add('hidden'); } },
+          el('div', { class: 'help-box' }, el('h3', {}, '⌨️ Keyboard & mouse'),
+            el('div', { class: 'keys' }, ...keys.map(([k, d]) => el('div', {}, el('kbd', {}, k), el('span', {}, d)))),
+            el('div', { class: 'hint' }, 'Ctrl+Alt+G (desktop app) toggles click-through. Click anywhere outside this box to close it.')));
+        document.body.append(this.helpEl);
+      }
+      this.helpEl.classList.toggle('hidden');
+    }
+
+    renderLog(p) {
+      p.append(el('h4', {}, '📜 Event log'));
+      const list = el('div', { class: 'log-list' });
+      const items = this.app.logList || [];
+      if (!items.length) list.append(el('div', {}, 'Nothing has happened yet.'));
+      for (const it of items) list.append(el('div', {}, el('span', { class: 't' }, it.t), it.text));
+      p.append(list);
     }
 
     // ------------------------------------------------------------ colony mode
@@ -283,7 +315,11 @@
           el('span', {}, `👥 ${col.pop - col.soldiers}/${col.housing}`), el('span', {}, `🛡️ ${col.soldiers}`),
           el('span', {}, `💡 ${Math.floor(col.knowledge)}`), el('span', {}, `🏠 ${col.buildings.filter((b) => b.done).length}`)));
         const res = el('div', { class: 'col-res' });
-        for (const [k, icon] of C.RES) if (col.res[k] > 0 || ['food', 'wood', 'stone'].includes(k)) res.append(el('span', { title: k }, `${icon} ${Math.floor(col.res[k])}`));
+        const rates = col.emp.rates || {};
+        for (const [k, icon] of C.RES) if (col.res[k] > 0 || ['food', 'wood', 'stone'].includes(k)) {
+          const r = Math.round(rates[k] || 0);
+          res.append(el('span', { title: `${k}: ${r >= 0 ? '+' : ''}${r} per minute` }, `${icon} ${Math.floor(col.res[k])}`, r ? el('span', { class: 'rate ' + (r > 0 ? 'up' : 'down') }, `${r > 0 ? '+' : ''}${r}/m`) : null));
+        }
         p.append(res);
         const r = col.research && C.TECHS[col.research];
         p.append(el('div', { class: 'row' }, el('label', {}, 'Researching'),
@@ -410,6 +446,9 @@
         el('div', { class: 'row' }, el('label', {}, 'Edge scrolling'), check('edgePan'), el('span', {}, 'move the mouse to a screen edge to look around')),
         el('div', { class: 'row' }, el('label', {}, 'Hide controls after'), select('idleDelay', [[3, '3 s'], [5, '5 s'], [10, '10 s'], [30, '30 s'], [0, 'never']])),
         el('div', { class: 'row' }, el('label', {}, 'Main menu'), check('showMenu'), el('span', {}, 'show the main menu when the app starts')),
+        el('div', { class: 'row' }, el('label', {}, 'Minimap'), check('minimap'), el('span', {}, 'always visible (M); click it to jump')),
+        el('div', { class: 'row' }, el('label', {}, 'Autosave every'), select('autosave', [[0, 'never'], [1, '1 minute'], [3, '3 minutes'], [5, '5 minutes'], [10, '10 minutes']])),
+        el('div', { class: 'row' }, el('button', { class: 'chip', onclick: () => this.app.menu.open('saves') }, '💾 Save / 📂 Load'), el('button', { class: 'chip', onclick: () => this.help() }, '⌨️ All shortcuts (?)')),
         el('h4', {}, 'Idle mode'),
         el('div', { class: 'row' }, el('label', {}, 'Change biome every'), select('autoCycle', [[0, 'never'], [5, '5 minutes'], [15, '15 minutes'], [30, '30 minutes'], [60, '1 hour']])),
       );
@@ -443,6 +482,17 @@
 
     onDown(e) {
       this.app.poke();
+      const mr = this.app.miniRect;
+      if (mr && e.button === 0 && e.clientX >= mr.x0 && e.clientX <= mr.x0 + mr.mw && e.clientY >= mr.y0 && e.clientY <= mr.y0 + mr.mh) {
+        // click on the minimap: fly there
+        const W = this.app.world;
+        this.app.follow = null;
+        this.app.cam.x = ((e.clientX - mr.x0) / mr.mw) * W.w;
+        this.app.cam.y = ((e.clientY - mr.y0) / mr.mh) * W.h;
+        this.app.clampCam();
+        this.app.camT = Math.max(this.app.camT || 0, 90);
+        return;
+      }
       const p = this.toWorld(e);
       if (e.button === 1) { this.panning = [e.clientX, e.clientY]; e.preventDefault(); return; }
       this.pos = p;
@@ -541,6 +591,7 @@
     onKey(e) {
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
       const app = this.app;
+      if (this.helpEl && !this.helpEl.classList.contains('hidden')) { if (e.key === 'Escape' || e.key === '?' || e.key === 'F1') { this.helpEl.classList.add('hidden'); e.preventDefault(); } return; }
       if (app.solar && app.solar.isOpen) { if (e.key === 'Escape') app.solar.close(); return; }
       if (app.menuOpen) { if (e.key === 'Escape' && app.menu.screen !== 'main') app.menu.show('main'); else if (e.key === 'Escape' && app.hasGame) app.menu.close(); return; }
       app.poke();
@@ -560,6 +611,18 @@
         case 'ArrowUp': case 'w': case 'W': app.panBy(0, -8 / app.cam.z); break;
         case 'ArrowDown': case 's': case 'S': app.panBy(0, 8 / app.cam.z); break;
         case 'f': case 'F': app.follow = null; break;
+        case '1': app.setSpeed(1); app.toast('▶ 1× speed'); break;
+        case '2': app.setSpeed(2); app.toast('⏩ 2× speed'); break;
+        case '3': app.setSpeed(4); app.toast('⏩ 4× speed'); break;
+        case '4': app.setSpeed(8); app.toast('⏩ 8× speed'); break;
+        case 'm': case 'M': app.setSetting('minimap', !app.settings.minimap); break;
+        case 'c': case 'C': case 'Home': if (!app.jumpHome()) app.toast('No town here to go to'); break;
+        case 'l': case 'L': this.openTab(this.tab === 'log' ? null : 'log'); break;
+        case 'g': case 'G': if (app.mode === 'colony') this.openTab(this.tab === 'colony' ? null : 'colony'); break;
+        case 'p': case 'P': if (app.mode === 'colony' && app.solar) app.solar.open(); break;
+        case '?': case 'F1': this.help(); e.preventDefault(); break;
+        case 'F5': e.preventDefault(); DS.Saves.save('quick').then((ok) => app.toast(ok ? '⚡ Quicksaved' : 'Nothing to save yet')); break;
+        case 'F9': e.preventDefault(); if (DS.Saves.has('quick')) { app.toast('⚡ Loading quicksave…'); setTimeout(() => DS.Saves.load('quick').then(() => app.toast('📂 Quicksave loaded')), 30); } else app.toast('No quicksave yet (press F5)'); break;
         case '[': this.setBrush(this.brush - 1); break;
         case ']': this.setBrush(this.brush + 1); break;
         case 'Escape': this.setTool({ kind: 'hand' }, 'Hand'); this.openTab(null); app.follow = null; break;

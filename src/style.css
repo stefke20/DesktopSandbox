@@ -220,3 +220,28 @@ body.solar-open #ui, body.solar-open #hud, body.solar-open #colony-hud, body.sol
 .solar-card .grid { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
 .solar-card .hint { margin-top: 8px; }
 @media (max-width: 700px) { .solar-card { top: auto; bottom: 12px; right: 16px; left: 16px; width: auto; max-height: 45vh; } }
+
+/* saves */
+.menu-continue { display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 4px 0 14px; }
+.save-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.save-row { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.05); border-radius: 10px; padding: 8px 10px; flex-wrap: wrap; }
+.save-name { font-weight: 700; min-width: 110px; }
+.save-info { flex: 1; opacity: 0.8; font-size: 12px; min-width: 160px; }
+.save-btns { display: flex; gap: 6px; }
+
+/* event log */
+.log-list { display: flex; flex-direction: column; gap: 3px; max-height: 50vh; overflow: auto; font-size: 12px; }
+.log-list div { padding: 3px 6px; border-radius: 6px; background: rgba(255,255,255,0.04); }
+.log-list .t { opacity: 0.55; margin-right: 6px; font-variant-numeric: tabular-nums; }
+
+/* help overlay */
+#help { position: fixed; inset: 0; z-index: 40; background: rgba(4, 6, 14, 0.78); display: flex; align-items: center; justify-content: center; padding: 16px; }
+#help.hidden { display: none; }
+#help .help-box { background: rgba(18, 22, 40, 0.97); color: #eef; border-radius: 14px; padding: 18px 22px; max-width: 760px; width: 100%; max-height: 90vh; overflow: auto; font: 13px system-ui, sans-serif; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
+#help h3 { margin: 0 0 10px; }
+#help .keys { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 18px; }
+#help .keys div { display: flex; gap: 8px; align-items: baseline; }
+#help kbd { background: rgba(255,255,255,0.12); border-radius: 4px; padding: 1px 6px; font-size: 11px; white-space: nowrap; }
+.rate { font-size: 10px; margin-left: 3px; }
+.rate.up { color: #7ae08a; }
+.rate.down { color: #ff8a7a; }

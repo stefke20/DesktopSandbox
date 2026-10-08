@@ -1379,6 +1379,12 @@
       const emps = new Set();
       for (const col of this.colonies) if (col.alive && !col.species && !emps.has(col.emp)) { emps.add(col.emp); if (!col.emp.home.alive) col.emp.home = col; this.researchTick(col.emp.home); }
       if (this.t % 60 === 0) for (const col of this.colonies) if (col.alive && col.planet !== this.planet) this.abstractTick(col);
+      // income per minute, smoothed, for the colony panel
+      if (this.t % 600 === 0) for (const e of emps) {
+        const prev = e.lastRes || {}, rates = e.rates || {};
+        for (const k in e.res) { if (prev[k] != null) rates[k] = (rates[k] || 0) * 0.5 + (e.res[k] - prev[k]) * 6 * 0.5; }
+        e.rates = rates; e.lastRes = Object.assign({}, e.res);
+      }
       this.updateMissions();
       this.storyteller();
       this.updateRockets();
@@ -1990,6 +1996,7 @@
   }
 
   Civ.TIERS = TIERS;
+  Civ.Colony = Colony;
   Civ.refreshThreats = refreshThreats;
   Civ.ERAS = ERAS;
   Civ.TECHS = TECHS;

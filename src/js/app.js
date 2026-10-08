@@ -6,7 +6,7 @@
 
   const DEFAULTS = {
     biome: 'grasslands', scale: 4, dayMinutes: 12, autoCycle: 0, showStats: false, showHud: true, showMenu: true,
-    idleDelay: 5, fps: 60, stripHeight: 0.3, edgePan: true,
+    idleDelay: 5, fps: 60, stripHeight: 0.3, edgePan: true, autosave: 3, minimap: false,
   };
   const KEY = 'pixel-terrarium.settings';
   // how much bigger the world is than the screen (the rest is reached by panning)
@@ -140,7 +140,9 @@
       this.biome = biome;
       this.updateClock(0);
       eco.daylight = this.daylight;
-      return { W, eco, rng: U.rng(seed == null ? (Math.random() * 1e9) | 0 : seed) };
+      const s = seed == null ? (Math.random() * 1e9) | 0 : seed;
+      if (!keepCiv) this.worldSeed = s;
+      return { W, eco, rng: U.rng(s) };
     },
 
     finishWorld(rng) {
@@ -215,6 +217,12 @@
     // ------------------------------------------------------------ planets (Colony mode)
     saveSlot() {
       return { world: this.world, fx: this.fx, eco: this.eco, weather: this.weather, bg: this.bg, biome: this.biome, meteors: this.meteors, cam: Object.assign({}, this.cam) };
+    },
+
+    // swap the simulated world without touching the screen buffers (used by saving)
+    loadSlotQuiet(s) {
+      Object.assign(this, { world: s.world, fx: s.fx, eco: s.eco, weather: s.weather, bg: s.bg, biome: s.biome, meteors: s.meteors });
+      this.cam = Object.assign({}, s.cam);
     },
 
     loadSlot(s) {
@@ -306,7 +314,7 @@
       this.clampCam();
     },
 
-    setSpeed(v) { this.speed = v; },
+    setSpeed(v) { this.speed = v; if (this.god && this.god.tab === 'time') this.god.refresh(); },
     setTime(t) {
       if (this.settings.dayMinutes === -1) this.setSetting('dayMinutes', 12);
       this.time = ((t % 1) + 1) % 1;
@@ -448,7 +456,9 @@
       if (this.settings.fps === 30 && dt < 30) return;
       this.prev = now;
       this.frame++;
-      if (this.speed > 0) {
+      // a running game waits while the menu or the solar system covers it
+      const covered = (this.menuOpen && this.hasGame) || (this.solar && this.solar.isOpen);
+      if (this.speed > 0 && !covered) {
         this.acc += dt * this.speed;
         let n = 0;
         while (this.acc >= 1000 / 60 && n < 4 * this.speed) {
@@ -480,6 +490,33 @@
         }
       }
       if (this.frame % 15 === 0) this.updateHud();
+      this.autosave(now);
+    },
+
+    autosave(now) {
+      const every = this.settings.autosave;
+      if (!every || !this.hasGame || this.menuOpen || !DS.Saves || this.saving) { this.lastSave = this.lastSave || now; return; }
+      if (!this.lastSave) this.lastSave = now;
+      if (now - this.lastSave < every * 60000) return;
+      this.lastSave = now;
+      this.saving = true;
+      DS.Saves.save('auto').then(() => { this.log('💾 Autosaved'); }).catch((e) => console.warn('autosave failed', e)).finally(() => { this.saving = false; });
+    },
+
+    // a short history of everything that popped up
+    log(text) {
+      this.logList = this.logList || [];
+      const d = new Date();
+      this.logList.unshift({ t: `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`, text });
+      if (this.logList.length > 80) this.logList.length = 80;
+      if (this.god && this.god.tab === 'log') this.god.refresh();
+    },
+
+    // centre the camera on your town
+    jumpHome() {
+      const col = this.civ && this.civ.local;
+      if (col && col.planet === this.planet) { this.cam.x = col.x; this.cam.y = DS.CivBrain.gy(this.world, col.x) - this.screenH / this.cam.z * 0.25; this.clampCam(); this.camT = 90; return true; }
+      return false;
     },
 
     render() {
@@ -589,12 +626,14 @@
       if (before === this.cam.x + ',' + this.cam.y) this.camT = Math.max(this.camT || 0, 40);
     },
     drawMinimap(ctx) {
-      if (!(this.camT > 0)) return;
-      this.camT--;
+      const always = this.settings.minimap && !this.menuOpen;
+      if (!(this.camT > 0) && !always) { this.miniRect = null; return; }
+      if (this.camT > 0) this.camT--;
       const W = this.world, v = this.view();
-      const mw = 130, mh = Math.round((mw * W.h) / W.w);
+      const mw = Math.min(260, Math.max(130, Math.round(W.w / 8))), mh = Math.round((mw * W.h) / W.w);
       const x0 = 10, y0 = this.canvas.height - mh - 12;
-      const a = Math.min(1, this.camT / 30);
+      const a = always ? 0.9 : Math.min(1, this.camT / 30);
+      this.miniRect = { x0, y0, mw, mh };
       ctx.save();
       ctx.globalAlpha = a;
       ctx.fillStyle = 'rgba(0,0,0,0.45)';
@@ -603,6 +642,11 @@
       ctx.strokeStyle = '#ffcf4a';
       ctx.lineWidth = 1.5;
       ctx.strokeRect(x0 + (v.x / W.w) * mw, y0 + (v.y / W.h) * mh, (v.w / W.w) * mw, (v.h / W.h) * mh);
+      // your towns
+      if (this.civ) for (const col of this.civ.here()) if (col.alive) {
+        ctx.fillStyle = DS.Civ.COLORS[col.color];
+        ctx.fillRect(x0 + (col.x / W.w) * mw - 2, y0 + (DS.CivBrain.gy(W, col.x) / W.h) * mh - 5, 4, 4);
+      }
       ctx.restore();
     },
     view() {
@@ -641,6 +685,7 @@
       this.clampCam();
     },
     toast(text) {
+      this.log(text);
       const t = document.getElementById('toast');
       if (!t) return;
       t.textContent = text;

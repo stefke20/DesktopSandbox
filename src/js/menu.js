@@ -73,6 +73,7 @@
       const box = el('div', { class: 'menu-box' + (screen === 'main' ? ' main' : '') });
       this.root.append(box);
       if (screen === 'main') this.main(box);
+      else if (screen === 'saves') this.saves(box);
       else if (screen === 'sandbox') this.sandbox(box);
       else this.worldSetup(box, mode || screen);
     }
@@ -86,11 +87,57 @@
       const card = (id, icon, name) => el('button', { class: 'mode-card', onclick: () => this.show(id === 'sandbox' ? 'sandbox' : 'setup', id) },
         el('div', { class: 'mode-icon' }, icon), el('div', { class: 'mode-name' }, name), el('div', { class: 'mode-desc' }, DESC[id]));
       cards.append(card('sandbox', '🏝️', 'Sandbox'), card('world', '🌍', 'World'), card('colony', '🏛️', 'Colony'));
+      const SV = DS.Saves, list = SV.list();
+      if (list.auto && !this.app.hasGame) {
+        box.append(el('div', { class: 'menu-continue' }, el('button', { class: 'chip start', onclick: () => this.load('auto') }, `▶ Continue — ${list.auto.text}`), el('div', { class: 'menu-sub' }, `autosaved ${SV.ago(list.auto.date)}`)));
+      }
       box.append(cards);
       const foot = el('div', { class: 'menu-foot' });
       if (this.app.hasGame) foot.append(el('button', { class: 'chip', onclick: () => this.close() }, '▶ Back to game'));
+      foot.append(el('button', { class: 'chip', onclick: () => this.show('saves') }, this.app.hasGame ? '💾 Save / 📂 Load' : '📂 Load game'));
       if (window.desktop) foot.append(el('button', { class: 'chip', onclick: () => window.desktop.quit() }, '⏻ Quit'));
       box.append(foot);
+    }
+
+    // save slots: save the running game or load an old one
+    saves(box) {
+      const SV = DS.Saves, app = this.app;
+      box.append(this.header('💾 Saved games', app.hasGame ? 'Save your world, or load another one' : 'Load a saved world'));
+      const list = SV.list();
+      const grid = el('div', { class: 'save-list' });
+      for (const [slot, label] of SV.SLOTS) {
+        const m = list[slot];
+        const row = el('div', { class: 'save-row' },
+          el('div', { class: 'save-name' }, label),
+          el('div', { class: 'save-info' }, m ? `${m.text} · ${SV.ago(m.date)}` : 'empty'));
+        const btns = el('div', { class: 'save-btns' });
+        if (app.hasGame && slot !== 'auto') btns.append(el('button', { class: 'chip', onclick: async () => { await SV.save(slot); app.toast(`💾 Saved to ${label.replace(/^\S+ /, '')}`); this.show('saves'); } }, 'Save here'));
+        if (m) btns.append(el('button', { class: 'chip', onclick: () => this.load(slot) }, 'Load'));
+        if (m && slot !== 'auto') btns.append(el('button', { class: 'chip small', title: 'Delete', onclick: async () => { await SV.remove(slot); this.show('saves'); } }, '🗑'));
+        row.append(btns);
+        grid.append(row);
+      }
+      box.append(grid, el('div', { class: 'hint' }, 'The game autosaves every few minutes (see ⚙️ Settings). F5 quicksaves and F9 loads the quicksave.'));
+    }
+
+    load(slot) {
+      this.root.innerHTML = '<div class="menu-box main"><div class="menu-title">Loading…</div></div>';
+      setTimeout(async () => {
+        try {
+          const ok = await DS.Saves.load(slot);
+          this.close();
+          this.app.toast(ok ? '📂 Game loaded' : 'That save could not be loaded');
+        } catch (e) {
+          console.error(e);
+          this.show('main');
+          this.app.toast('⚠️ Loading failed');
+        }
+      }, 30);
+    }
+
+    // keep the running game before replacing it with a new one
+    async keepCurrent() {
+      if (this.app.hasGame) { try { await DS.Saves.save('auto'); } catch (e) { /* ignore */ } }
     }
 
     sandbox(box) {
@@ -98,7 +145,7 @@
       const grid = el('div', { class: 'biome-grid' });
       for (const b of DS.Biomes) {
         const animals = (b.fauna || []).slice(0, 4).map(([id]) => S[id] && S[id].name).filter(Boolean).join(', ');
-        grid.append(el('button', { class: 'biome-card', onclick: () => { this.app.loadBiome(b.id); this.app.hasGame = true; this.close(); } },
+        grid.append(el('button', { class: 'biome-card', onclick: async () => { await this.keepCurrent(); this.app.loadBiome(b.id); this.app.hasGame = true; this.close(); } },
           el('div', { class: 'biome-icon' }, b.icon), el('div', { class: 'biome-name' }, b.name), el('div', { class: 'biome-desc' }, animals)));
       }
       box.append(grid);
@@ -206,9 +253,11 @@
         enabled, allowed, myth: !offC.has('myth'), size: st.size, seed,
         events: new Set(Object.keys(DS.Events.DEFS).filter((id) => !st.events.includes(id))), eventEvery: st.eventEvery,
         colony, enemies: st.enemies, difficulty: st.difficulty, name: st.name,
+        off: { cats: [...offC], species: [...offS] },
       };
       this.root.innerHTML = '<div class="menu-box main"><div class="menu-title">Creating world…</div></div>';
-      setTimeout(() => {
+      setTimeout(async () => {
+        await this.keepCurrent();
         this.app.loadWorld(opts);
         this.app.hasGame = true;
         this.close();
